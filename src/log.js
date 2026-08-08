@@ -54,22 +54,37 @@ function summary() {
     },
   }));
 
+  // Historical totals come from the log, not from memory — in-memory state is swept
+  // after two hours and lost on restart, and "how many did we turn away last month"
+  // is the question that actually gets asked.
   const entries = read();
-  const counts = entries.reduce((acc, e) => {
-    if (e.type === 'tool') acc.toolCalls = (acc.toolCalls || 0) + 1;
-    if (e.type === 'booked') acc.booked = (acc.booked || 0) + 1;
-    return acc;
-  }, {});
+  const area = entries.filter((e) => e.type === 'area_result');
+  const outcomes = entries.filter((e) => e.type === 'outcome');
+  const tools = entries.filter((e) => e.type === 'tool');
+
+  const uniq = (list, key) => new Set(list.map((e) => e[key]).filter(Boolean)).size;
+  const slowest = tools.reduce((m, e) => Math.max(m, e.ms || 0), 0);
 
   return {
-    activeCalls: calls.length,
-    outOfArea: calls.filter((c) => c.inArea === false).length,
-    unclearArea: calls.filter((c) => c.inArea === 'unclear').length,
-    emergencies: calls.filter((c) => c.emergency).length,
-    booked: calls.filter((c) => c.booked).length,
-    bothGatesClosed: calls.filter((c) => c.gateA && c.gateB).length,
-    logCounts: counts,
-    calls,
+    since: entries.length ? entries[0].at : null,
+
+    allTime: {
+      callsSeen: uniq(entries, 'conversationId'),
+      inArea: area.filter((e) => e.inArea === true).length,
+      turnedAwayOutOfArea: area.filter((e) => e.inArea === false).length,
+      unclearArea: area.filter((e) => e.inArea === 'unclear').length,
+      booked: outcomes.filter((e) => e.outcome === 'booked').length,
+      emergencies: outcomes.filter((e) => e.outcome === 'emergency').length,
+      toolCalls: tools.length,
+      toolFailures: tools.filter((e) => e.ok === false).length,
+      slowestToolMs: slowest,
+    },
+
+    live: {
+      activeCalls: calls.length,
+      bothGatesClosed: calls.filter((c) => c.gateA && c.gateB).length,
+      calls,
+    },
   };
 }
 

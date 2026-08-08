@@ -15,6 +15,7 @@ const postcode = require('../postcode');
 const time = require('../time');
 const cal = require('../calcom');
 const jobDescription = require('../jobDescription');
+const auditLog = require('../log');
 const { nextQuestion, probeFor } = require('../questions');
 const business = require('../../config/business.json');
 
@@ -65,6 +66,13 @@ function checkServiceArea(s, body) {
     : s.location.postcode;
   s.location.inArea = result.inArea;
   state.touch(s, { type: 'service_area', outward: result.outward, inArea: result.inArea });
+  // Durable, so "how many did we turn away as out of area" survives a restart.
+  auditLog.write({
+    type: 'area_result',
+    conversationId: s.conversationId,
+    outward: result.outward,
+    inArea: result.inArea,
+  });
 
   if (result.inArea === true) {
     const next = nextQuestion(s);
@@ -291,6 +299,14 @@ async function bookAppointment(s, body) {
   s.bookingUid = r.json && r.json.data ? r.json.data.uid : null;
   s.outcome = 'booked';
   state.touch(s, { type: 'booked', uid: s.bookingUid, label: slot.label });
+  auditLog.write({
+    type: 'outcome',
+    outcome: 'booked',
+    conversationId: s.conversationId,
+    uid: s.bookingUid,
+    label: slot.label,
+    postcode: s.location.postcode,
+  });
 
   return {
     ok: true,
@@ -420,11 +436,40 @@ async function cancelBooking(s) {
 
 /* ------------------------------------------------------------ 7. emergency */
 
+/**
+ * The safety wording is returned BY THE TOOL, not left to the model.
+ *
+ * A scenario run caught the assistant flagging the emergency correctly and then
+ * skipping straight to "shall the office ring you?" — no windows, no 0800 number.
+ * The instruction to say it was in the prompt, and the prompt got skipped. Same
+ * lesson as the booking gate: if it must never fail, it lives in code.
+ */
+const SAFETY_SCRIPTS = {
+  gas:
+    "Right, stop there — that's a gas emergency, so let's get you safe first. Don't touch any switches and don't light anything. Open your windows, turn the gas off at the meter if you can get to it safely, get everyone out of the house, and ring the National Gas Emergency Service on 0800 111 999 straight away. They'll come out and make it safe.",
+  co:
+    "Turn the boiler off if you can, open the windows, and get everyone outside into fresh air. Then ring the National Gas Emergency Service on 0800 111 999. If anyone's actually feeling unwell, ring 999.",
+  water:
+    "Turn it off at the mains if you can get to it safely, and keep away from it. We don't do out-of-hours call-outs, so ring the office on {OFFICE} when they open — Monday to Friday, eight till five — and they'll get someone to you.",
+  electrical:
+    "Turn the electric off at the consumer unit if you can do it safely, and keep away from it. We don't do out-of-hours call-outs, so ring the office on {OFFICE} when they open — Monday to Friday, eight till five. If you can smell burning or see flames, ring 999.",
+};
+
 function flagEmergency(s, body) {
-  s.emergency = String(body.kind || 'gas').trim();
+  const kind = String(body.kind || 'gas').trim().toLowerCase();
+  s.emergency = SAFETY_SCRIPTS[kind] ? kind : 'gas';
   s.outcome = 'emergency';
   state.touch(s, { type: 'emergency', kind: s.emergency });
-  return { ok: true, say: 'Noted — safety first, no booking on this call.' };
+  auditLog.write({ type: 'outcome', outcome: 'emergency', conversationId: s.conversationId, kind: s.emergency });
+
+  const script = (SAFETY_SCRIPTS[s.emergency] || SAFETY_SCRIPTS.gas).replace('{OFFICE}', OFFICE);
+  return {
+    ok: true,
+    kind: s.emergency,
+    // The assistant is told to read this out word for word.
+    say: script,
+    then: "After saying that, you may ask ONE question: whether they'd like the office to ring them once the property is made safe. Then close the call warmly. Do not offer a booking.",
+  };
 }
 
 module.exports = {

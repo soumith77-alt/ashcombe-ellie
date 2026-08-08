@@ -14,13 +14,30 @@
  */
 
 require('dotenv').config();
-const { run } = require('./converse');
+const { run, runAdaptive } = require('./converse');
 const cal = require('../src/calcom');
 
 const BASE = process.env.PUBLIC_BASE_URL;
 
-/** Anything that sounds like an appointment time being offered. */
-const TIME_OFFER = /\b\d{1,2}([:.]\d{2})?\s*(am|pm)\b|\bhalf (past )?(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b|\bfirst thing\b/i;
+/**
+ * Anything that sounds like an appointment time being offered.
+ *
+ * Must match spelled-out times too — the assistant says "Wednesday the twelfth at
+ * eight" rather than "8am", which reads better aloud. A digits-only pattern would
+ * pass the bug-1 check for the wrong reason and fail the bug-2 check for the wrong
+ * reason.
+ */
+const CLOCK_WORD = '(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)';
+const TIME_OFFER = new RegExp(
+  [
+    String.raw`\b\d{1,2}([:.]\d{2})?\s*(am|pm)\b`,
+    String.raw`\bat\s+${CLOCK_WORD}\b`,
+    String.raw`\bhalf (past )?${CLOCK_WORD}\b`,
+    String.raw`\b(quarter (past|to))\s+${CLOCK_WORD}\b`,
+    String.raw`\bfirst thing\b`,
+  ].join('|'),
+  'i'
+);
 const BOOKING_OFFER = /\b(shall i (get you )?(book|put you|schedule)|would you like (me )?to (book|schedule)|can i book you|get you booked|put you down for|schedule a visit|book you in for)\b/i;
 const SAFETY_SCRIPT = /0800\s*111\s*999|national gas emergency/i;
 
@@ -79,11 +96,16 @@ const SCENARIOS = {
     const offered = st ? st.offeredSlots.map((s) => s.label) : [];
     check('bug2', 'slots came from Cal.com, not invented', offered.length > 0 && offered.length <= 3, JSON.stringify(offered));
     if (offered.length) {
-      const spokenMatchesDiary = offered.some((l) => {
-        const t = l.split(' at ')[1];
-        return t && reply.toLowerCase().includes(t.replace(/(am|pm)/, '').trim());
+      // The diary speaks in "9am"; the assistant says "nine". Accept either.
+      const WORDS = ['twelve', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+      const said = reply.toLowerCase();
+      const spokenMatchesDiary = offered.every((label) => {
+        const t = (label.split(' at ')[1] || '').replace(/(am|pm)/, '').trim(); // "9" or "11:30"
+        const hour = Number(t.split(':')[0]);
+        const asWord = WORDS[hour % 12] || '';
+        return said.includes(t) || (asWord && said.includes(asWord));
       });
-      check('bug2', 'the times spoken match the times the diary returned', spokenMatchesDiary, `offered=${JSON.stringify(offered)}`);
+      check('bug2', 'every time spoken matches a time the diary returned', spokenMatchesDiary, `offered=${JSON.stringify(offered)} reply="${reply}"`);
     }
   },
 
@@ -185,22 +207,35 @@ const SCENARIOS = {
 
   async happyPath() {
     await reset();
-    const { transcript } = await run(
+    const { transcript } = await runAdaptive(
       [
-        "Hiya, I've got no hot water at all.",
-        "It's M20 2RT.",
-        "14 Oak Road, Didsbury.",
-        "It's a repair. The heating's still working fine, it's just the hot water.",
-        "It's a Worcester Bosch combi. There's a code, F28. And there's water underneath it.",
-        'Wednesday morning would be good.',
-        'The first one please.',
-        'James Whitfield.',
-        "It's 07986 321440.",
-        'J - W - H - I - T - F - I - E - L - D at gmail dot com',
-        "Yes, that's right.",
-        "Yes, that's all correct, go ahead and book it.",
+        { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /address|house number|street/i, reply: '14 Oak Road, Didsbury.' },
+        { match: /repair.*service|service.*repair|new boiler|kind of job/i, reply: "It's a repair." },
+        { match: /heating.*(alright|too|still)|radiators/i, reply: "The heating's still working fine, it's just the hot water." },
+        // Answers make AND code together — she often asks for both in one breath,
+        // and a fixed answer to only the first half loses the code entirely.
+        { match: /make|worcester.*baxi|manufacturer/i, reply: "It's a Worcester Bosch combi, and there's a code showing on the display — F28." },
+        { match: /code|gc number|display/i, reply: "The code is F28." },
+        { match: /anything else|noticed|water underneath|warning light|pilot/i, reply: "There's water underneath it, yes. Nothing else." },
+        { match: /what day|day suits|morning or afternoon/i, reply: 'Wednesday morning would be good.' },
+        { match: /any of those|any good|which.*suit|I can do/i, reply: 'The first one please.' },
+        { match: /full name|your name/i, reply: 'James Whitfield.' },
+        { match: /number|contact/i, reply: "It's 07986 321440." },
+        { match: /email|spell/i, reply: 'J - W - H - I - T - F - I - E - L - D at gmail dot com' },
+        { match: /all correct|got all that|is that right|check I'?ve got/i, reply: "Yes, that's all correct, go ahead and book it." },
       ],
-      { name: 'happyPath', quiet: true }
+      {
+        name: 'happyPath',
+        opener: "Hiya, I've got no hot water at all.",
+        quiet: true,
+        maxTurns: 20,
+        // Stop as soon as the booking really exists, rather than guessing turn count.
+        done: async () => {
+          const st = await stateOf();
+          return Boolean(st && st.bookingUid);
+        },
+      }
     );
 
     const all = transcript.map((t) => t.ellie).join('\n');

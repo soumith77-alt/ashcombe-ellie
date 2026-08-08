@@ -95,11 +95,50 @@ function writeEnv(kv) {
   console.log('  .env updated');
 }
 
+/**
+ * Keeps our view of the diary true when the office moves something by hand.
+ * Skipped when there's no public URL yet — the tunnel changes between sessions.
+ */
+async function ensureWebhook() {
+  const base = process.env.PUBLIC_BASE_URL;
+  if (!base) {
+    console.log('  webhook: skipped (PUBLIC_BASE_URL not set)');
+    return;
+  }
+  const subscriberUrl = `${base}/webhooks/calcom`;
+  const triggers = ['BOOKING_CREATED', 'BOOKING_RESCHEDULED', 'BOOKING_CANCELLED'];
+
+  const list = await cal.call('/webhooks', { version: cal.API_VERSION.EVENT_TYPES });
+  const existing = (list.json.data || []).find((w) => w.subscriberUrl === subscriberUrl);
+  if (existing) {
+    console.log(`  webhook already registered -> ${existing.id}`);
+    return;
+  }
+
+  // Drop stale tunnels from previous sessions so they don't pile up.
+  for (const w of list.json.data || []) {
+    if (/trycloudflare\.com|ngrok/.test(w.subscriberUrl || '')) {
+      await cal.call(`/webhooks/${w.id}`, { method: 'DELETE', version: cal.API_VERSION.EVENT_TYPES });
+      console.log(`  removed stale webhook ${w.id}`);
+    }
+  }
+
+  const r = await cal.call('/webhooks', {
+    method: 'POST',
+    version: cal.API_VERSION.EVENT_TYPES,
+    body: { subscriberUrl, triggers, active: true, payloadTemplate: null },
+  });
+  console.log(r.ok
+    ? `  webhook registered -> ${subscriberUrl}`
+    : `  webhook registration failed: ${r.status} ${JSON.stringify(r.json).slice(0, 300)}`);
+}
+
 (async () => {
   console.log('Cal.com setup');
   const scheduleId = await ensureSchedule();
   const eventTypeId = await ensureEventType(scheduleId);
   writeEnv({ CALCOM_SCHEDULE_ID: scheduleId, CALCOM_EVENT_TYPE_ID: eventTypeId });
+  await ensureWebhook();
 
   console.log('\nVerifying slots come back in London booking hours...');
   const { ymd, addDays, parts } = require('../src/time');

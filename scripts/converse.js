@@ -59,7 +59,49 @@ async function run(turns, { name = 'test', quiet = false } = {}) {
   return { conversationId, transcript, text: transcript.map((t) => t.ellie).join('\n') };
 }
 
-module.exports = { run, say, newConversation };
+/**
+ * A caller who answers whatever was actually asked.
+ *
+ * A fixed list of turns drifts the moment the assistant does something reasonable
+ * but unscripted — most often spending a turn on "let me have a look at the diary"
+ * before the slots arrive. Every later answer then lands on the wrong question and
+ * the run fails for no real reason. This replies based on what was said instead.
+ *
+ * @param {Array<{match: RegExp, reply: string, once?: boolean}>} answers
+ */
+async function runAdaptive(answers, { name = 'test', maxTurns = 18, opener, quiet = false, done } = {}) {
+  const conversationId = await newConversation(name);
+  const transcript = [];
+  const used = new Set();
+
+  let next = opener;
+  for (let i = 0; i < maxTurns && next !== null; i++) {
+    const reply = await say(conversationId, next);
+    transcript.push({ caller: next, ellie: reply });
+    if (!quiet) {
+      console.log(`  caller > ${next}`);
+      console.log(`  Ellie  > ${reply.replace(/\n+/g, ' ')}\n`);
+    }
+
+    if (done && (await done(transcript))) break;
+
+    const candidate = answers.find(
+      (a, idx) => a.match.test(reply) && !(a.once && used.has(idx))
+    );
+    if (candidate) {
+      used.add(answers.indexOf(candidate));
+      next = candidate.reply;
+    } else {
+      // She's said something that isn't a question — a filler line, or a
+      // confirmation. Nudge gently rather than answering a question she never asked.
+      next = /\?/.test(reply) ? "Yes, that's right." : 'Right, thanks.';
+    }
+  }
+
+  return { conversationId, transcript, text: transcript.map((t) => t.ellie).join('\n') };
+}
+
+module.exports = { run, runAdaptive, say, newConversation };
 
 if (require.main === module) {
   const turns = process.argv.slice(2);
