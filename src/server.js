@@ -12,37 +12,53 @@ app.use(express.json({ limit: '1mb' }));
 /**
  * Conversation key.
  *
- * Never taken from a field the model fills — an LLM that invents a booking will
- * happily invent an id. Telnyx sends its own identifiers as headers; we look for
- * those first and only fall back to the body if none arrived.
+ * Verified against live Telnyx traffic: a webhook tool call arrives with NO call
+ * identifier. Headers carry only telnyx-signature-ed25519 and telnyx-timestamp;
+ * the body carries only the parameters the model filled. Templated header values
+ * are not resolved either — "{{call_control_id}}" arrives with braces intact.
  *
- * The first request of the process dumps every header, so the real header name is
- * confirmed from live traffic rather than assumed.
+ * So the assistant carries the reference itself, read from {{call_control_id}} in
+ * its instructions. Anything that looks like an unresolved template or an empty
+ * value is rejected rather than used as a key.
  */
 const ID_HEADERS = [
   'x-telnyx-conversation-id',
   'telnyx-conversation-id',
   'x-telnyx-call-control-id',
   'telnyx-call-control-id',
-  'x-telnyx-call-session-id',
 ];
 
 let dumpedHeaders = false;
 
+function usable(v) {
+  const s = String(v || '').trim();
+  if (!s) return null;
+  if (s.includes('{{') || s.includes('}}')) return null; // unresolved template
+  if (/^(null|undefined|none|n\/a)$/i.test(s)) return null;
+  return s;
+}
+
 function conversationId(req) {
   if (!dumpedHeaders) {
     dumpedHeaders = true;
-    console.log('[headers] first inbound tool call — full header set for id verification:');
-    console.log(JSON.stringify(req.headers, null, 2));
-    log.write({ type: 'first_headers', headers: req.headers });
+    console.log('[headers] first inbound tool call — headers and body, for id verification:');
+    console.log(JSON.stringify({ headers: req.headers, body: req.body }, null, 2));
+    log.write({ type: 'first_headers', headers: req.headers, body: req.body });
   }
+
+  // Kept in case Telnyx starts sending one; costs nothing and beats the body.
   for (const h of ID_HEADERS) {
-    if (req.headers[h]) return String(req.headers[h]);
+    const v = usable(req.headers[h]);
+    if (v) return v;
   }
+
   const b = req.body || {};
-  return String(
-    b.telnyx_conversation_id || b.conversation_id || b.conversationId || 'local-test'
-  );
+  const ref = usable(b.conversationRef) || usable(b.conversation_id) || usable(b.conversationId);
+  if (ref) return ref;
+
+  // No reference available: web-chat testing, where {{call_control_id}} is empty.
+  // Safe for one call at a time; concurrent voice calls always carry a real id.
+  return 'no-ref';
 }
 
 function callerNumber(req) {
@@ -109,6 +125,24 @@ app.post('/webhooks/telnyx-insights', (req, res) => {
 
 /** "How many callers did we turn away as out of area?" — the month-two question. */
 app.get('/report', (_req, res) => res.json(log.summary()));
+
+/** Inspect a call's state — used by the scenario tests to assert on real state. */
+app.get('/state/:id', (req, res) => {
+  const s = state.all().find((x) => x.conversationId === req.params.id);
+  if (!s) return res.status(404).json({ ok: false });
+  res.json(state.withGates(s));
+});
+
+/**
+ * Test-only. Web chat has no {{call_control_id}}, so every chat conversation keys
+ * to "no-ref" and would otherwise inherit the previous scenario's answers.
+ * Refuses unless explicitly enabled, so it can't be hit in production.
+ */
+app.post('/test/reset', (req, res) => {
+  if (process.env.ALLOW_TEST_RESET !== 'true') return res.status(403).json({ ok: false });
+  state.reset();
+  res.json({ ok: true });
+});
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {

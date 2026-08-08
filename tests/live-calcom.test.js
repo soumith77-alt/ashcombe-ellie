@@ -94,3 +94,43 @@ test('full booking round trip: book, verify in diary, cancel', { skip: !configur
   assert.ok(cancelled.ok, `cleanup failed: ${JSON.stringify(cancelled.json).slice(0, 300)}`);
   console.log('    cleaned up');
 });
+
+test('slot taken between the offer and the confirmation: re-offer, not a double booking',
+  { skip: !configured }, async () => {
+    const s = qualified('live-race');
+
+    const avail = await tools.checkAvailability(s, { dayPreference: 'Thursday', timePreference: 'any' });
+    assert.equal(avail.ok, true);
+    const chosen = avail.slots[0].label;
+    const takenIso = s.offeredSlots[0].startIso;
+
+    // The office fills that slot by hand while the caller is still deciding.
+    const intruder = await cal.createBooking({
+      eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+      startIso: takenIso,
+      name: 'Walk-in Customer',
+      email: 'manyamsoumithreddy@gmail.com',
+      phone: '07000 000000',
+      description: 'Booked at the office desk mid-call',
+    });
+    assert.ok(intruder.ok, `could not simulate the office booking: ${JSON.stringify(intruder.json).slice(0, 300)}`);
+    const intruderUid = intruder.json.data.uid;
+    console.log('    office took the slot:', chosen);
+
+    try {
+      const r = await tools.bookAppointment(s, { chosenSlotLabel: chosen });
+
+      assert.equal(r.ok, false, 'must not double book');
+      assert.equal(r.reason, 'slot_gone');
+      assert.equal(s.bookingUid, null, 'nothing should have been written');
+      assert.ok(/another time|sorry|taken/i.test(r.say), `expected a graceful re-offer, got: "${r.say}"`);
+      assert.ok(!/error|failed|system|exception/i.test(r.say), `must not mention systems: "${r.say}"`);
+
+      // The gone slot is dropped, so it can't be offered again.
+      assert.ok(!s.offeredSlots.some((x) => x.startIso === takenIso), 'the taken slot must be removed');
+      console.log('    refused gracefully:', r.say);
+    } finally {
+      await cal.cancelBooking(intruderUid, 'Automated test cleanup');
+      console.log('    cleaned up');
+    }
+  });
