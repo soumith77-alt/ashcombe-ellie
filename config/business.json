@@ -1,0 +1,11 @@
+{
+  "businessName": "Ashcombe Heating",
+  "agentName": "Ellie",
+  "officePhone": "0000 000 0000",
+  "timezone": "Europe/London",
+  "bookingHours": { "startHour": 8, "endHour": 17, "days": [1, 2, 3, 4, 5] },
+  "slotLengthMinutes": 120,
+  "outOfHoursEmergency": false,
+  "gasEmergencyNumber": "0800 111 999",
+  "maxSlotsOffered": 3
+}

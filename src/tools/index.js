@@ -1,0 +1,443 @@
+'use strict';
+
+/**
+ * The six webhook tools.
+ *
+ * Every handler takes (state, body) and returns a plain object. No Express types
+ * in here, so the tests can drive them directly without a server.
+ *
+ * The refusals below are the whole point of this service. The assistant's prompt
+ * says the same things, but a prompt gets skipped under pressure and this does not.
+ */
+
+const state = require('../state');
+const postcode = require('../postcode');
+const time = require('../time');
+const cal = require('../calcom');
+const jobDescription = require('../jobDescription');
+const { nextQuestion, probeFor } = require('../questions');
+const business = require('../../config/business.json');
+
+const OFFICE = business.officePhone;
+
+/* ------------------------------------------------------------------ helpers */
+
+function gates(s) {
+  return { gateA: state.gateA(s), gateB: state.gateB(s) };
+}
+
+/** Refuse if anything about this call means booking must not happen. */
+function bookingBlocked(s) {
+  if (s.emergency) {
+    return {
+      ok: false,
+      reason: 'emergency',
+      say: `I can't book a visit while there's a safety issue at the property. Once it's been made safe, ring the office on ${OFFICE} and we'll get someone out.`,
+    };
+  }
+  const { gateA, gateB } = gates(s);
+  if (!gateA || !gateB) {
+    const next = nextQuestion(s);
+    return {
+      ok: false,
+      blocked: 'gate',
+      reason: 'gate',
+      gateA,
+      gateB,
+      missing: next.missing,
+      say: next.say,
+    };
+  }
+  return null;
+}
+
+/* ----------------------------------------------------- 1. check_service_area */
+
+function checkServiceArea(s, body) {
+  const result = postcode.check(body.postcode, body.town);
+
+  if (result.reask) {
+    return { ok: true, inArea: 'unclear', reask: true, say: result.say };
+  }
+
+  s.location.postcode = result.outward
+    ? String(body.postcode || '').toUpperCase().trim()
+    : s.location.postcode;
+  s.location.inArea = result.inArea;
+  state.touch(s, { type: 'service_area', outward: result.outward, inArea: result.inArea });
+
+  if (result.inArea === true) {
+    const next = nextQuestion(s);
+    return { ok: true, inArea: true, say: `${result.say} ${next.say}`.trim() };
+  }
+  return { ok: true, inArea: result.inArea, say: result.say };
+}
+
+/* -------------------------------------------------------- 2. next_question */
+
+function nextQuestionTool(s) {
+  const { gateA, gateB } = gates(s);
+  const next = nextQuestion(s);
+  return { ok: true, missing: next.missing, gateA, gateB, say: next.say };
+}
+
+/* -------------------------------------------------------- 3. record_details */
+
+const DIAG_KEYS = ['issueType', 'fault', 'probeAnswer', 'makeModel', 'gcOrErrCode', 'symptoms'];
+const CONTACT_KEYS = ['name', 'phone', 'email'];
+
+function recordDetails(s, body) {
+  if (body.address !== undefined && body.address !== null) s.location.address = String(body.address).trim();
+
+  if (body.postcode !== undefined && body.postcode !== null && String(body.postcode).trim() !== '') {
+    const r = postcode.check(body.postcode);
+    if (!r.reask) {
+      s.location.postcode = String(body.postcode).toUpperCase().trim();
+      s.location.inArea = r.inArea;
+    }
+  }
+
+  for (const k of DIAG_KEYS) {
+    if (body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '') {
+      s.diagnostics[k] = String(body[k]).trim();
+    }
+  }
+  for (const k of CONTACT_KEYS) {
+    if (body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '') {
+      s.contact[k] = String(body[k]).trim();
+    }
+  }
+
+  if (body.emergency) s.emergency = String(body.emergency).trim();
+
+  state.touch(s, { type: 'record', fields: Object.keys(body || {}) });
+
+  const { gateA, gateB } = gates(s);
+  const next = nextQuestion(s);
+  return { ok: true, gateA, gateB, missing: next.missing, say: next.say };
+}
+
+/* ----------------------------------------------------- 4. check_availability */
+
+async function checkAvailability(s, body) {
+  const blocked = bookingBlocked(s);
+  if (blocked) return blocked; // Cal.com is never touched.
+
+  const day = time.resolveDay(body.dayPreference);
+  if (!day) {
+    return {
+      ok: true,
+      slots: [],
+      say: 'What day were you thinking? I can look from tomorrow onwards.',
+    };
+  }
+
+  const pref = time.resolveTimePreference(body.timePreference);
+  const start = day;
+  const end = time.ymd(time.addDays(new Date(`${day}T12:00:00Z`), 7));
+
+  const r = await cal.getSlots({
+    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    start,
+    end,
+  });
+  if (!r.ok) {
+    return {
+      ok: false,
+      reason: 'lookup_failed',
+      say: `I'm having a bit of trouble with the diary just now — could you give the office a ring on ${OFFICE}? Sorry about that.`,
+    };
+  }
+
+  const now = Date.now();
+  const usable = r.slots
+    .map((iso) => ({ iso, d: new Date(iso) }))
+    .filter((x) => x.d.getTime() > now)
+    .filter((x) => time.withinBookingHours(x.d));
+
+  const onRequestedDay = usable.filter((x) => time.ymd(x.d) === day);
+  const preferred = onRequestedDay.filter((x) => time.matchesTimePreference(x.d, pref));
+
+  // Prefer the day and half-day asked for; widen only as far as needed so the
+  // caller always hears concrete options rather than another question.
+  let chosen = preferred.length ? preferred : onRequestedDay;
+  let widened = false;
+  if (!chosen.length) {
+    chosen = usable.filter((x) => time.matchesTimePreference(x.d, pref));
+    if (!chosen.length) chosen = usable;
+    widened = true;
+  }
+
+  const picked = chosen.slice(0, business.maxSlotsOffered);
+  if (!picked.length) {
+    return {
+      ok: true,
+      slots: [],
+      say: "I've nothing free in the next week or so by the look of it. Is there another week that'd suit?",
+    };
+  }
+
+  s.offeredSlots = picked.map((x) => ({ label: time.spokenLabel(x.iso), startIso: x.iso }));
+  state.touch(s, { type: 'availability', offered: s.offeredSlots.map((x) => x.label) });
+
+  const labels = s.offeredSlots.map((x) => x.label);
+  const spoken =
+    labels.length === 1
+      ? `I can do ${labels[0]}.`
+      : `I can do ${labels.slice(0, -1).join(', ')}, or ${labels[labels.length - 1]}.`;
+
+  return {
+    ok: true,
+    slots: s.offeredSlots.map((x) => ({ label: x.label })), // ISO never leaves the server
+    widened,
+    say: `${spoken} Any of those any good?`,
+  };
+}
+
+/* ------------------------------------------------------- 5. book_appointment */
+
+function findOfferedSlot(s, chosenSlotLabel) {
+  const wanted = String(chosenSlotLabel || '').toLowerCase().trim();
+  if (!wanted) return null;
+  const exact = s.offeredSlots.find((x) => x.label.toLowerCase() === wanted);
+  if (exact) return exact;
+  // Tolerate the assistant paraphrasing its own offer ("Wednesday at 9am").
+  return s.offeredSlots.find((x) => {
+    const l = x.label.toLowerCase();
+    const time_ = l.split(' at ')[1];
+    const weekday = l.split(' ')[0];
+    return time_ && wanted.includes(time_) && wanted.includes(weekday);
+  }) || null;
+}
+
+async function bookAppointment(s, body) {
+  const blocked = bookingBlocked(s);
+  if (blocked) return blocked;
+
+  const missingContact = ['name', 'phone', 'email'].filter((k) => !state.isAnswered(s.contact[k]));
+  if (missingContact.length) {
+    const asks = {
+      name: 'Can I take your full name?',
+      phone: "And the best number to get you on?",
+      email: 'And an email for the confirmation — could you spell it out for me?',
+    };
+    return {
+      ok: false,
+      reason: 'missing_field',
+      missing: missingContact,
+      say: asks[missingContact[0]],
+    };
+  }
+
+  if (!state.isAnswered(body.chosenSlotLabel)) {
+    return {
+      ok: false,
+      reason: 'missing_field',
+      missing: ['chosenSlotLabel'],
+      say: 'Which of those times would suit you best?',
+    };
+  }
+
+  // THE LOCK: a time we never offered cannot be booked, however confidently it was said.
+  const slot = findOfferedSlot(s, body.chosenSlotLabel);
+  if (!slot) {
+    const labels = s.offeredSlots.map((x) => x.label);
+    return {
+      ok: false,
+      reason: 'slot_not_offered',
+      offered: labels,
+      say: labels.length
+        ? `Let me just check — I've got ${labels.join(', or ')}. Which of those would you like?`
+        : "Let me have another look at the diary and find you a time.",
+    };
+  }
+
+  // Re-check the slot is still free: availability and booking are separate calls
+  // and the office can fill it in between.
+  const fresh = await cal.getSlots({
+    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    start: time.ymd(new Date(slot.startIso)),
+    end: time.ymd(time.addDays(new Date(slot.startIso), 1)),
+  });
+  const stillFree = fresh.ok && fresh.slots.some((iso) => new Date(iso).getTime() === new Date(slot.startIso).getTime());
+  if (!stillFree) {
+    s.offeredSlots = s.offeredSlots.filter((x) => x.startIso !== slot.startIso);
+    return {
+      ok: false,
+      reason: 'slot_gone',
+      say: `Ah — someone's just taken that one, sorry. Shall I find you another time?`,
+    };
+  }
+
+  const r = await cal.createBooking({
+    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    startIso: slot.startIso,
+    name: s.contact.name,
+    email: s.contact.email,
+    phone: s.contact.phone,
+    description: jobDescription.build(s),
+    metadata: { source: 'phone', conversationId: String(s.conversationId).slice(0, 40) },
+  });
+
+  if (!r.ok) {
+    state.touch(s, { type: 'book_failed', status: r.status, body: JSON.stringify(r.json).slice(0, 300) });
+    return {
+      ok: false,
+      reason: 'booking_failed',
+      say: `I'm having a bit of trouble getting that to save just now — could you give the office a ring on ${OFFICE} and they'll get it in the diary for you? Sorry about that.`,
+    };
+  }
+
+  s.bookingUid = r.json && r.json.data ? r.json.data.uid : null;
+  s.outcome = 'booked';
+  state.touch(s, { type: 'booked', uid: s.bookingUid, label: slot.label });
+
+  return {
+    ok: true,
+    say: `Lovely, you're all booked in for ${slot.label}. You'll get a confirmation email through in the next few minutes, and the office will give you a ring to confirm the engineer and the arrival window.`,
+  };
+}
+
+/* ------------------------------------------- 6. find / reschedule / cancel */
+
+function digitsOf(v) {
+  return String(v || '').replace(/\D/g, '').replace(/^44/, '0');
+}
+
+async function findBooking(s, body) {
+  const phone = digitsOf(body.phone || s.callerNumber);
+  if (!phone) {
+    return { ok: true, found: false, say: "What's the best number the booking would've been made under?" };
+  }
+
+  const r = await cal.getBookings({ status: 'upcoming', take: '50' });
+  if (!r.ok) {
+    return { ok: false, say: `I can't pull the diary up just now — could you ring the office on ${OFFICE}?` };
+  }
+
+  const rows = Array.isArray(r.json.data) ? r.json.data : (r.json.data && r.json.data.bookings) || [];
+  const match = rows.find((b) => {
+    const hay = JSON.stringify(b.attendees || b.attendee || {});
+    return digitsOf(hay).includes(phone.slice(-9)) || (b.metadata && digitsOf(b.metadata.phone).includes(phone.slice(-9)));
+  });
+
+  if (!match) {
+    return { ok: true, found: false, say: "I can't find a booking under that number, I'm afraid. Shall I take some details and get you booked in?" };
+  }
+
+  // Date and time only — never the name. The caller confirms the name to us.
+  s.foundBooking = { uid: match.uid, startIso: match.start, name: attendeeName(match) };
+  state.touch(s, { type: 'found_booking', uid: match.uid });
+
+  return {
+    ok: true,
+    found: true,
+    label: time.spokenLabel(match.start),
+    say: `I've got a visit booked for ${time.spokenLabel(match.start)}. Can I just take the name it's under?`,
+  };
+}
+
+function attendeeName(b) {
+  if (b.attendees && b.attendees[0] && b.attendees[0].name) return b.attendees[0].name;
+  if (b.attendee && b.attendee.name) return b.attendee.name;
+  return '';
+}
+
+function confirmName(s, body) {
+  if (!s.foundBooking) {
+    return { ok: false, verified: false, say: `Let me pull that up first — what number would it be under?` };
+  }
+  const given = String(body.name || '').toLowerCase().replace(/[^a-z]/g, '');
+  const real = String(s.foundBooking.name || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = given && real && (real.includes(given) || given.includes(real));
+
+  if (!match) {
+    // Never reveal the real name on a mismatch.
+    s.foundBooking = null;
+    return {
+      ok: true,
+      verified: false,
+      say: `That's not the name I've got on it, I'm afraid. Best ring the office on ${OFFICE} and they'll sort it out for you.`,
+    };
+  }
+  s.foundBooking.verified = true;
+  return { ok: true, verified: true, say: "That's the one. Did you want to move it or cancel it?" };
+}
+
+async function rescheduleBooking(s, body) {
+  if (!s.foundBooking || !s.foundBooking.verified) {
+    return { ok: false, reason: 'not_found', say: `Let me find the booking first — what number is it under?` };
+  }
+  if (s.emergency) return bookingBlocked(s);
+
+  const slot = findOfferedSlot(s, body.chosenSlotLabel);
+  if (!slot) {
+    const labels = s.offeredSlots.map((x) => x.label);
+    return {
+      ok: false,
+      reason: 'slot_not_offered',
+      offered: labels,
+      say: labels.length ? `I've got ${labels.join(', or ')}. Which suits?` : 'Let me look at the diary and find you a time.',
+    };
+  }
+
+  const r = await cal.rescheduleBooking(s.foundBooking.uid, { startIso: slot.startIso });
+  if (!r.ok) {
+    const already = r.status === 400;
+    return {
+      ok: false,
+      reason: already ? 'not_reschedulable' : 'failed',
+      say: already
+        ? "That one's already been cancelled, by the look of it. Shall I get you a new time instead?"
+        : `I can't move it just now — could you ring the office on ${OFFICE}?`,
+    };
+  }
+  s.foundBooking.uid = (r.json.data && r.json.data.uid) || s.foundBooking.uid;
+  s.outcome = 'rescheduled';
+  state.touch(s, { type: 'rescheduled', label: slot.label });
+  return { ok: true, say: `That's moved to ${slot.label}. You'll get a new confirmation email through shortly.` };
+}
+
+async function cancelBooking(s) {
+  if (!s.foundBooking || !s.foundBooking.verified) {
+    return { ok: false, reason: 'not_found', say: `Let me find the booking first — what number is it under?` };
+  }
+  const r = await cal.cancelBooking(s.foundBooking.uid, 'Cancelled by caller on the phone');
+  if (!r.ok) {
+    const already = r.status === 400;
+    return {
+      ok: false,
+      reason: already ? 'already_cancelled' : 'failed',
+      say: already
+        ? "That one's already been cancelled, so there's nothing to do there."
+        : `I can't cancel it just now — could you ring the office on ${OFFICE}?`,
+    };
+  }
+  s.outcome = 'cancelled';
+  state.touch(s, { type: 'cancelled' });
+  return { ok: true, say: "That's cancelled for you. Was there anything else?" };
+}
+
+/* ------------------------------------------------------------ 7. emergency */
+
+function flagEmergency(s, body) {
+  s.emergency = String(body.kind || 'gas').trim();
+  s.outcome = 'emergency';
+  state.touch(s, { type: 'emergency', kind: s.emergency });
+  return { ok: true, say: 'Noted — safety first, no booking on this call.' };
+}
+
+module.exports = {
+  checkServiceArea,
+  nextQuestionTool,
+  recordDetails,
+  checkAvailability,
+  bookAppointment,
+  findBooking,
+  confirmName,
+  rescheduleBooking,
+  cancelBooking,
+  flagEmergency,
+  findOfferedSlot,
+  probeFor,
+};
