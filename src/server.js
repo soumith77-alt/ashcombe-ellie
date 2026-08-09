@@ -125,6 +125,13 @@ app.get('/health', (_req, res) => {
   });
 });
 
+/**
+ * The bare domain is the first thing anyone pastes into a browser, and until now
+ * it answered "Cannot GET /". The console is the only thing here a human wants,
+ * so send them there.
+ */
+app.get('/', (_req, res) => res.redirect(302, '/widget'));
+
 /** A flame, inline. Stops /favicon.ico 404-ing in the console someone is reading
  *  while debugging a call that won't connect. */
 app.get('/favicon.ico', (_req, res) => {
