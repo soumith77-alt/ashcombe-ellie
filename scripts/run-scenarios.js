@@ -230,6 +230,9 @@ const SCENARIOS = {
         { match: /make|worcester.*baxi|manufacturer/i, reply: "It's a Worcester Bosch combi, and there's a code showing on the display — F28." },
         { match: /code|gc number|display/i, reply: "The code is F28." },
         { match: /anything else|noticed|water underneath|warning light|pilot/i, reply: "There's water underneath it, yes. Nothing else." },
+        // The repair lane asks two more than the old flow did.
+        { match: /how long|constant|come and go|intermittent/i, reply: 'Since yesterday morning, and it\'s been constant.' },
+        { match: /anyone else|looked at it|been out to it|had it looked/i, reply: "No, nobody else has touched it." },
         { match: /what day|day suits|morning or afternoon/i, reply: 'Wednesday morning would be good.' },
         { match: /any of those|any good|which.*suit|I can do/i, reply: 'The first one please.' },
         { match: /full name|your name/i, reply: 'James Whitfield.' },
@@ -241,7 +244,7 @@ const SCENARIOS = {
         name: 'happyPath',
         opener: "Hiya, I've got no hot water at all.",
         quiet: true,
-        maxTurns: 20,
+        maxTurns: 28,
         // Stop as soon as the booking really exists, rather than guessing turn count.
         done: async () => {
           const st = await stateOf();
