@@ -343,6 +343,9 @@ async function findBooking(s, body) {
 
   // Date and time only — never the name. The caller confirms the name to us.
   s.foundBooking = { uid: match.uid, startIso: match.start, name: attendeeName(match) };
+  // They're on the books already: exempt from both gates so they aren't marched
+  // through the postcode and the four fault questions all over again.
+  s.isExistingCustomer = true;
   state.touch(s, { type: 'found_booking', uid: match.uid });
 
   return {

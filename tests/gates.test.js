@@ -242,3 +242,35 @@ test('reschedule and cancel both require a verified find first', async () => {
   assert.equal(r2.ok, false);
   assert.equal(r2.reason, 'not_found');
 });
+
+/* ------------------------- the existing-customer exemption can't be forged */
+
+test('the LLM cannot grant itself the existing-customer exemption', async () => {
+  const s = fresh();
+  // Every field the model is allowed to send, plus the one it must never set.
+  tools.recordDetails(s, {
+    isExistingCustomer: true,
+    foundBooking: { uid: 'forged', verified: true },
+    gate: { A: true, B: true },
+    address: '1 Nowhere',
+  });
+
+  assert.equal(s.isExistingCustomer, false, 'record_details must not set the exemption');
+  assert.equal(s.foundBooking, null, 'record_details must not forge a found booking');
+  assert.equal(state.gateA(s), false);
+  assert.equal(state.gateB(s), false);
+
+  const r = await tools.checkAvailability(s, { dayPreference: 'Wednesday' });
+  assert.equal(r.ok, false);
+  assert.equal(calTouched, 0, 'Cal.com must still not be touched');
+});
+
+test('a matched booking exempts the caller from both gates', () => {
+  const s = fresh();
+  assert.equal(state.gateA(s), false);
+  // What find_booking does on a real match.
+  s.isExistingCustomer = true;
+  assert.equal(state.gateA(s), true, 'they were gated when the visit was first booked');
+  assert.equal(state.gateB(s), true);
+  assert.deepEqual(state.missingFields(s), [], 'nothing left to ask them');
+});

@@ -51,8 +51,15 @@ function newState(conversationId, callerNumber) {
   };
 }
 
-/** Gate A — we know where the property is, and it is ours to serve. */
+/**
+ * Gate A — we know where the property is, and it is ours to serve.
+ *
+ * Existing customers are exempt: they were gated when the visit was first booked,
+ * and re-asking someone their own postcode to move an appointment is daft. The
+ * exemption only applies once `find_booking` has matched a real booking.
+ */
 function gateA(state) {
+  if (state.isExistingCustomer) return true;
   return (
     isAnswered(state.location.address) &&
     isAnswered(state.location.postcode) &&
@@ -69,6 +76,7 @@ function gateB(state) {
 /** What is still outstanding, in the order the call should ask for it. */
 function missingFields(state) {
   const missing = [];
+  if (state.isExistingCustomer) return missing; // already diagnosed and located
   if (!isAnswered(state.location.postcode)) missing.push('postcode');
   else if (state.location.inArea !== true) missing.push('areaCheck');
   if (!isAnswered(state.location.address)) missing.push('address');
