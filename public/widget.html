@@ -6,266 +6,237 @@
 <title>Ellie · Ashcombe Heating — live call console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&display=swap" rel="stylesheet" />
 <style>
-/* ─────────────────────────────────────────────── tokens
-   Warm amber against cool slate. The warmth is deliberate — this is a heating
-   company, and it separates Ellie's voice from the caller's at a glance.      */
+/* ───────────────────────────────────────────────────────── tokens
+   Warm light: a cream base with amber and sky washes. The warmth is the point —
+   this is a heating company, and it keeps a status-heavy page from reading cold
+   and clinical. Every text colour below clears 4.5:1 on white.               */
 :root {
-  --bg:        #0a0c10;
-  --bg-glow:   #10141c;
-  --surface:   #12161f;
-  --surface-2: #171c27;
-  --line:      #232a37;
-  --line-soft: #1b212c;
+  --cream:    #FDFBF8;
+  --surface:  #FFFFFF;
+  --line:     #ECE5DC;
+  --line-2:   #E3DACE;
 
-  --text:      #e8ecf4;
-  --text-dim:  #9aa5b8;   /* 5.9:1 on --surface */
-  --text-faint:#6b7688;   /* labels only, never body */
+  --text:     #1A1512;   /* 16.8:1 */
+  --muted:    #5F564F;   /* 7.2:1  */
+  --faint:    #857A72;   /* 4.6:1  — labels, never long prose */
 
-  --ember:     #f0a04b;
-  --ember-lo:  rgba(240,160,75,.12);
-  --cool:      #7aa2f7;
-  --cool-lo:   rgba(122,162,247,.12);
-  --go:        #4ade80;
-  --go-lo:     rgba(74,222,128,.12);
-  --stop:      #f87171;
-  --stop-lo:   rgba(248,113,113,.12);
+  --ember:    #C2570A;   /* 4.7:1 on white */
+  --ember-d:  #9A4406;
+  --ember-w:  #FFF3E4;
+  --sky:      #1D4ED8;
+  --sky-w:    #EEF3FF;
+  --go:       #04785B;   /* 4.9:1 */
+  --go-w:     #E7F7F1;
+  --stop:     #B4260F;
+  --stop-w:   #FDECEA;
 
-  --r-sm: 8px; --r: 14px; --r-lg: 20px;
-  --t: 200ms cubic-bezier(.4,0,.2,1);
+  --r:    14px;
+  --r-lg: 22px;
+  --t: 220ms cubic-bezier(.4,0,.2,1);
 
-  /* z-scale: 10 content, 20 sticky, 30 overlay, 50 widget */
-  --z-sticky: 20;
+  --shadow:    0 1px 2px rgba(60,40,20,.05), 0 10px 30px rgba(120,88,52,.07);
+  --shadow-lg: 0 2px 6px rgba(60,40,20,.06), 0 22px 50px rgba(120,88,52,.11);
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(900px 500px at 12% -10%, rgba(240,160,75,.07), transparent 60%),
-    radial-gradient(800px 500px at 100% 0%, rgba(122,162,247,.06), transparent 55%),
-    var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 16px; line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1100px 620px at 8% -8%,  #FFE3C0 0%, rgba(255,227,192,0) 58%),
+    radial-gradient(900px 560px at 96% -2%,  #D9E6FF 0%, rgba(217,230,255,0) 52%),
+    radial-gradient(800px 700px at 50% 112%, #FFEBD3 0%, rgba(255,235,211,0) 60%),
+    linear-gradient(180deg, var(--cream), #F6F1EA);
+  background-attachment: fixed;
 }
-h1,h2,h3 { margin: 0; line-height: 1.25; }
+h1,h2,h3 { margin: 0; line-height: 1.2; }
 
-.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 22px 120px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 26px 22px 140px; }
 
-/* ─────────────────────────────────────────────── header */
-header {
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding-bottom: 22px; margin-bottom: 24px;
-  border-bottom: 1px solid var(--line-soft);
-}
+/* ───────────────────────────────────────────────────────── header */
+header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 46px; }
+.brand { display: flex; align-items: center; gap: 12px; }
 .mark {
-  width: 46px; height: 46px; flex: none;
-  display: grid; place-items: center;
-  border-radius: 13px;
-  background: linear-gradient(145deg, #2a2016, #1a1d27);
-  border: 1px solid #3a2c1c;
-  color: var(--ember);
+  width: 42px; height: 42px; flex: none; display: grid; place-items: center;
+  border-radius: 13px; color: #fff;
+  background: linear-gradient(150deg, #F5A03C, #C2570A);
+  box-shadow: 0 5px 14px rgba(194,87,10,.28);
 }
-.mark svg { width: 24px; height: 24px; }
-.title h1 { font-size: 1.22rem; font-weight: 600; letter-spacing: -.02em; }
-.title p  { margin: 2px 0 0; color: var(--text-dim); font-size: .87rem; }
-.title em {
-  font-family: Newsreader, Georgia, serif; font-style: italic;
-  color: var(--ember); font-size: 1.03em;
-}
-.head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.mark svg { width: 22px; height: 22px; }
+.brand b { font-weight: 600; font-size: 1rem; letter-spacing: -.01em; display: block; }
+.brand span { color: var(--muted); font-size: .8rem; }
+.head-right { margin-left: auto; display: flex; gap: 9px; flex-wrap: wrap; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 13px; border-radius: 999px;
-  background: var(--surface); border: 1px solid var(--line);
-  font-size: .78rem; font-weight: 500; color: var(--text-dim);
-  white-space: nowrap;
+  padding: 7px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.8); border: 1px solid var(--line-2);
+  font-size: .78rem; font-weight: 500; color: var(--muted); white-space: nowrap;
+  backdrop-filter: blur(8px);
 }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); flex: none; }
-.pill.live { color: var(--go); border-color: rgba(74,222,128,.32); background: var(--go-lo); }
-.pill.live .dot { background: var(--go); animation: breathe 2s ease-in-out infinite; }
-.pill.warn { color: var(--stop); border-color: rgba(248,113,113,.32); background: var(--stop-lo); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #B9AEA4; flex: none; }
+.pill.live { color: var(--go); border-color: rgba(4,120,91,.28); background: var(--go-w); }
+.pill.live .dot { background: var(--go); animation: breathe 2.2s ease-in-out infinite; }
+.pill.warn { color: var(--stop); border-color: rgba(180,38,15,.28); background: var(--stop-w); }
 .pill.warn .dot { background: var(--stop); }
-@keyframes breathe { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes breathe { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-/* ─────────────────────────────────────────────── layout */
-.grid { display: grid; gap: 20px; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr); align-items: start; }
-@media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
+/* ───────────────────────────────────────────────────────── hero */
+.hero { text-align: center; margin-bottom: 44px; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 15px; border-radius: 999px; margin-bottom: 20px;
+  background: rgba(255,255,255,.75); border: 1px solid var(--line-2);
+  font-size: .74rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ember);
+}
+.hero h1 {
+  font-family: Fraunces, Georgia, serif; font-weight: 600;
+  font-size: clamp(2.1rem, 5.6vw, 3.5rem); letter-spacing: -.025em;
+  margin-bottom: 14px;
+}
+.hero h1 em {
+  font-style: italic;
+  background: linear-gradient(96deg, #C2570A, #E08A2B 45%, #1D4ED8);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p {
+  margin: 0 auto; max-width: 54ch; color: var(--muted); font-size: 1.03rem;
+}
 
-.card {
-  background: linear-gradient(180deg, var(--surface), #10141c);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  overflow: hidden;
+/* the live state chip — the widget does the talking, this just says what it's doing */
+.status {
+  display: inline-flex; align-items: center; gap: 12px; margin-top: 26px;
+  padding: 11px 20px 11px 13px; border-radius: 999px;
+  background: rgba(255,255,255,.86); border: 1px solid var(--line-2);
+  box-shadow: var(--shadow); backdrop-filter: blur(10px);
 }
-.card + .card { margin-top: 20px; }
-.card-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 15px 18px; border-bottom: 1px solid var(--line-soft);
-}
-.card-head h2 {
-  font-size: .74rem; font-weight: 600; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--text-faint);
-}
-.card-head .spacer { margin-left: auto; }
-.card-body { padding: 18px; }
-
-/* ─────────────────────────────────────────────── agent state */
-.state-strip {
-  display: flex; align-items: center; gap: 15px;
-  padding: 15px 18px; border-bottom: 1px solid var(--line-soft);
-  background: var(--surface-2);
-}
-.orb { position: relative; width: 42px; height: 42px; flex: none; display: grid; place-items: center; }
-.orb i {
-  position: absolute; inset: 0; border-radius: 50%;
-  background: var(--text-faint); opacity: .18;
-}
-.orb b {
-  position: relative; width: 13px; height: 13px; border-radius: 50%;
-  background: var(--text-faint); transition: background var(--t);
-}
-.orb.listening i { background: var(--cool); animation: ring 2s ease-out infinite; }
-.orb.listening b { background: var(--cool); }
+.orb { position: relative; width: 30px; height: 30px; flex: none; display: grid; place-items: center; }
+.orb i { position: absolute; inset: 0; border-radius: 50%; background: #C3B8AE; opacity: .25; }
+.orb b { position: relative; width: 10px; height: 10px; border-radius: 50%; background: #9C9089; transition: background var(--t); }
+.orb.listening i { background: var(--sky); animation: ring 2s ease-out infinite; }
+.orb.listening b { background: var(--sky); }
 .orb.thinking  i { background: var(--ember); animation: ring 1.1s ease-out infinite; }
 .orb.thinking  b { background: var(--ember); }
-.orb.speaking  i { background: var(--go); opacity: .22; }
+.orb.speaking  i { background: var(--go); opacity: .2; }
 .orb.speaking  b { background: var(--go); }
-@keyframes ring {
-  0%   { transform: scale(.55); opacity: .45; }
-  100% { transform: scale(1.25); opacity: 0; }
-}
-.state-label { font-weight: 600; font-size: .95rem; }
-.state-sub { color: var(--text-dim); font-size: .82rem; }
-
-/* equaliser — only while speaking. Hidden otherwise: five green dots sitting
-   there while she's silent reads as a status light that means nothing.        */
-.eq {
-  display: flex; align-items: flex-end; gap: 3px; height: 22px; margin-left: auto;
-  opacity: 0; visibility: hidden; transition: opacity var(--t);
-}
+@keyframes ring { 0% { transform: scale(.5); opacity: .5 } 100% { transform: scale(1.3); opacity: 0 } }
+.status-txt b { display: block; font-size: .92rem; font-weight: 600; }
+.status-txt span { font-size: .8rem; color: var(--muted); }
+.eq { display: flex; align-items: flex-end; gap: 3px; height: 20px; opacity: 0; visibility: hidden; transition: opacity var(--t); }
 .eq.on { opacity: 1; visibility: visible; }
-.eq span {
-  width: 3px; border-radius: 2px; background: var(--go); opacity: .8;
-  height: 5px; transform-origin: bottom;
-}
+.eq span { width: 3px; height: 5px; border-radius: 2px; background: var(--go); transform-origin: bottom; }
 .eq.on span { animation: bounce .9s ease-in-out infinite; }
-.eq span:nth-child(2){ animation-delay:.12s } .eq span:nth-child(3){ animation-delay:.24s }
-.eq span:nth-child(4){ animation-delay:.36s } .eq span:nth-child(5){ animation-delay:.48s }
-@keyframes bounce { 0%,100%{ transform: scaleY(.35) } 50%{ transform: scaleY(3.6) } }
+.eq span:nth-child(2){animation-delay:.12s} .eq span:nth-child(3){animation-delay:.24s}
+.eq span:nth-child(4){animation-delay:.36s} .eq span:nth-child(5){animation-delay:.48s}
+@keyframes bounce { 0%,100%{transform:scaleY(.35)} 50%{transform:scaleY(3.4)} }
 
-/* ─────────────────────────────────────────────── transcript */
-#transcript {
-  height: min(56vh, 500px); overflow-y: auto;
-  padding: 20px 18px; display: flex; flex-direction: column; gap: 14px;
-  scroll-behavior: smooth;
+/* ───────────────────────────────────────────────────────── cards */
+.card {
+  background: rgba(255,255,255,.82);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
 }
-#transcript::-webkit-scrollbar { width: 9px; }
-#transcript::-webkit-scrollbar-thumb { background: #262d3b; border-radius: 9px; border: 2px solid var(--surface); }
+.card + .card { margin-top: 22px; }
+.card-head { display: flex; align-items: center; gap: 10px; padding: 17px 22px; border-bottom: 1px solid var(--line); }
+.card-head h2 { font-size: .74rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: var(--faint); }
+.card-head .spacer { margin-left: auto; }
+.card-body { padding: 22px; }
 
-.turn { display: flex; gap: 11px; max-width: 86%; animation: rise 260ms cubic-bezier(.4,0,.2,1); }
-.turn.caller { margin-left: auto; flex-direction: row-reverse; }
-@keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+/* ───────────────────────────────────────────────────────── gates */
+.gates { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 720px) { .gates { grid-template-columns: 1fr; } }
 
-.who {
-  width: 30px; height: 30px; flex: none; border-radius: 9px;
-  display: grid; place-items: center; font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+.gate {
+  padding: 18px; border-radius: var(--r);
+  background: linear-gradient(180deg, #FFFFFF, #FBF8F4);
+  border: 1px solid var(--line-2);
+  transition: border-color var(--t), background var(--t), box-shadow var(--t);
 }
-.turn.ellie  .who { background: var(--ember-lo); color: var(--ember); border: 1px solid rgba(240,160,75,.28); }
-.turn.caller .who { background: var(--cool-lo);  color: var(--cool);  border: 1px solid rgba(122,162,247,.28); }
-
-.bubble { padding: 11px 15px; border-radius: var(--r); font-size: .93rem; }
-.turn.ellie  .bubble { background: var(--surface-2); border: 1px solid var(--line); border-top-left-radius: 5px; }
-.turn.caller .bubble { background: rgba(122,162,247,.15); border: 1px solid rgba(122,162,247,.3); border-top-right-radius: 5px; }
-.meta { margin-top: 6px; font-size: .7rem; color: var(--text-faint); display: flex; gap: 9px; }
-.turn.caller .meta { justify-content: flex-end; }
-.lat { color: var(--text-dim); }
-
-.empty { margin: auto; text-align: center; color: var(--text-faint); max-width: 30ch; }
-.empty svg { width: 34px; height: 34px; opacity: .4; margin-bottom: 10px; }
-.empty p { margin: 0; font-size: .87rem; }
-
-/* thinking dots */
-.thinking-row { display: flex; gap: 11px; }
-.dots { display: flex; gap: 4px; align-items: center; padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); border-top-left-radius: 5px; }
-.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: blink 1.3s infinite; }
-.dots i:nth-child(2){ animation-delay:.18s } .dots i:nth-child(3){ animation-delay:.36s }
-@keyframes blink { 0%,60%,100%{ opacity:.25 } 30%{ opacity:1 } }
-
-/* ─────────────────────────────────────────────── gates */
-.gate { padding: 14px 16px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--line); }
-.gate + .gate { margin-top: 11px; }
-.gate.open { border-color: rgba(74,222,128,.34); background: linear-gradient(180deg, var(--go-lo), var(--surface-2)); }
-.gate-top { display: flex; align-items: center; gap: 10px; }
-.gate-icon { width: 26px; height: 26px; flex: none; border-radius: 8px; display: grid; place-items: center; background: #1e2430; color: var(--text-faint); transition: all var(--t); }
-.gate.open .gate-icon { background: var(--go-lo); color: var(--go); }
-.gate-icon svg { width: 14px; height: 14px; }
-.gate-name { font-weight: 600; font-size: .9rem; }
-.gate-tag { margin-left: auto; font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+.gate.open {
+  border-color: rgba(4,120,91,.32);
+  background: linear-gradient(180deg, var(--go-w), #FFFFFF);
+  box-shadow: 0 6px 18px rgba(4,120,91,.09);
+}
+.gate-top { display: flex; align-items: center; gap: 11px; }
+.gate-icon {
+  width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center;
+  background: #F3EDE5; color: var(--faint); transition: all var(--t);
+}
+.gate.open .gate-icon { background: var(--go); color: #fff; }
+.gate-icon svg { width: 15px; height: 15px; }
+.gate-name { font-weight: 600; font-size: .95rem; }
+.gate-tag { margin-left: auto; font-size: .67rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
 .gate.open .gate-tag { color: var(--go); }
 
-.checks { list-style: none; margin: 11px 0 0; padding: 0; display: grid; gap: 7px; }
-.checks li { display: flex; align-items: center; gap: 9px; font-size: .84rem; color: var(--text-faint); transition: color var(--t); }
+.checks { list-style: none; margin: 15px 0 0; padding: 0; display: grid; gap: 9px; }
+.checks li { display: flex; align-items: center; gap: 10px; font-size: .87rem; color: var(--faint); transition: color var(--t); }
 .checks li .box {
-  width: 15px; height: 15px; flex: none; border-radius: 5px;
-  border: 1.5px solid #333c4c; display: grid; place-items: center;
-  transition: all var(--t);
+  width: 17px; height: 17px; flex: none; border-radius: 6px;
+  border: 1.5px solid #D4C9BC; background: #fff;
+  display: grid; place-items: center; color: #fff; transition: all var(--t);
 }
-.checks li .box svg { width: 9px; height: 9px; opacity: 0; transition: opacity var(--t); }
+.checks li .box svg { width: 10px; height: 10px; opacity: 0; transition: opacity var(--t); }
 .checks li.done { color: var(--text); }
-.checks li.done .box { background: var(--go); border-color: var(--go); color: #06240f; }
+.checks li.done .box { background: var(--go); border-color: var(--go); }
 .checks li.done .box svg { opacity: 1; }
-.checks li .val { margin-left: auto; color: var(--text-dim); font-size: .77rem; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checks li .val { margin-left: auto; color: var(--muted); font-size: .79rem; max-width: 13ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* progress rail */
-.rail { height: 3px; border-radius: 3px; background: #212836; overflow: hidden; margin-top: 12px; }
-.rail i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ember), var(--go)); transition: width 420ms cubic-bezier(.4,0,.2,1); }
+.rail { height: 4px; border-radius: 4px; background: #EFE8DF; overflow: hidden; margin-top: 15px; }
+.rail i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #F5A03C, #04785B); transition: width 460ms cubic-bezier(.4,0,.2,1); }
 
-/* lock banner */
 .lock {
-  display: flex; align-items: center; gap: 10px;
-  margin-top: 14px; padding: 11px 14px; border-radius: var(--r);
-  font-size: .84rem; background: var(--ember-lo); border: 1px solid rgba(240,160,75,.28); color: #f6c48b;
+  display: flex; align-items: center; gap: 11px;
+  margin-top: 18px; padding: 14px 17px; border-radius: var(--r); font-size: .88rem; font-weight: 500;
+  background: linear-gradient(90deg, var(--ember-w), #FFFBF6);
+  border: 1px solid rgba(194,87,10,.24); color: var(--ember-d);
 }
-.lock.open { background: var(--go-lo); border-color: rgba(74,222,128,.3); color: #9df0bb; }
-.lock.stop { background: var(--stop-lo); border-color: rgba(248,113,113,.34); color: #fca5a5; }
-.lock svg { width: 15px; height: 15px; flex: none; }
+.lock.open { background: linear-gradient(90deg, var(--go-w), #F6FFFB); border-color: rgba(4,120,91,.26); color: var(--go); }
+.lock.stop { background: linear-gradient(90deg, var(--stop-w), #FFF8F7); border-color: rgba(180,38,15,.26); color: var(--stop); }
+.lock svg { width: 16px; height: 16px; flex: none; }
 
-/* slots */
-.slots { display: flex; flex-wrap: wrap; gap: 8px; }
+/* ───────────────────────────────────────────────────────── slots */
+.slots { display: flex; flex-wrap: wrap; gap: 9px; }
 .slot {
-  padding: 8px 13px; border-radius: 999px; font-size: .83rem; font-weight: 500;
-  background: var(--cool-lo); border: 1px solid rgba(122,162,247,.3); color: #b9cdfb;
+  padding: 9px 15px; border-radius: 999px; font-size: .85rem; font-weight: 500;
+  color: var(--sky); background: var(--sky-w); border: 1px solid rgba(29,78,216,.22);
 }
-.muted { color: var(--text-faint); font-size: .85rem; margin: 0; }
+.muted { color: var(--faint); font-size: .87rem; margin: 0; }
 
-/* try-list */
-.try { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-@media (min-width: 780px) { .try { grid-template-columns: 1fr 1fr; gap: 12px 26px; } }
-.card.wide { margin-top: 20px; }
-.try li { display: flex; gap: 10px; font-size: .87rem; color: var(--text-dim); }
+/* ───────────────────────────────────────────────────────── try list */
+.try { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+@media (min-width: 780px) { .try { grid-template-columns: 1fr 1fr; gap: 14px 30px; } }
+.try li { display: flex; gap: 12px; font-size: .89rem; color: var(--muted); }
 .try .n {
-  width: 21px; height: 21px; flex: none; border-radius: 6px; margin-top: 1px;
-  background: var(--surface-2); border: 1px solid var(--line);
-  display: grid; place-items: center; font-size: .68rem; font-weight: 700; color: var(--text-faint);
+  width: 23px; height: 23px; flex: none; border-radius: 7px; margin-top: 1px;
+  display: grid; place-items: center; font-size: .7rem; font-weight: 700;
+  background: #F3EDE5; color: var(--faint);
 }
-.try code { background: #0d1017; border: 1px solid var(--line); border-radius: 5px; padding: .06em .38em; font-size: .88em; color: var(--ember); }
-.try li.danger .n { background: var(--stop-lo); border-color: rgba(248,113,113,.3); color: var(--stop); }
+.try li.danger .n { background: var(--stop-w); color: var(--stop); }
+.try strong { color: var(--text); font-weight: 600; }
+.try code {
+  background: var(--ember-w); border: 1px solid rgba(194,87,10,.2);
+  border-radius: 6px; padding: .07em .42em; font-size: .87em; color: var(--ember-d);
+}
 
-footer { margin-top: 26px; color: var(--text-faint); font-size: .8rem; display: flex; gap: 18px; flex-wrap: wrap; }
-footer a { color: var(--text-dim); }
+footer { margin-top: 30px; display: flex; gap: 18px; flex-wrap: wrap; color: var(--faint); font-size: .8rem; }
+footer a { color: var(--muted); }
 footer a:hover { color: var(--ember); }
+footer code { font-size: .95em; }
 
-:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; border-radius: 5px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
-  #transcript { scroll-behavior: auto; }
 }
 </style>
 </head>
@@ -273,15 +244,16 @@ footer a:hover { color: var(--ember); }
 <div class="wrap">
 
   <header>
-    <div class="mark" aria-hidden="true">
-      <!-- flame -->
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22c4 0 7-2.6 7-6.4 0-3.9-3.2-6.2-4.6-9.6-.5 2-1.6 3-2.9 4-1.6-1.7-1.8-3.4-1.6-5C7 6.6 5 9.4 5 13.2 5 18 8 22 12 22Z"/>
-      </svg>
-    </div>
-    <div class="title">
-      <h1>Ashcombe Heating — <em>Ellie</em></h1>
-      <p>Live call console · Gas Safe registered · Mon–Fri 08:00–17:00</p>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22c4 0 7-2.6 7-6.4 0-3.9-3.2-6.2-4.6-9.6-.5 2-1.6 3-2.9 4-1.6-1.7-1.8-3.4-1.6-5C7 6.6 5 9.4 5 13.2 5 18 8 22 12 22Z"/>
+        </svg>
+      </span>
+      <span>
+        <b>Ashcombe Heating</b>
+        <span>Gas Safe registered · Mon–Fri 08:00–17:00</span>
+      </span>
     </div>
     <div class="head-right">
       <span class="pill" id="pill-conn"><span class="dot"></span><span>Connecting…</span></span>
@@ -289,111 +261,95 @@ footer a:hover { color: var(--ember); }
     </div>
   </header>
 
-  <div class="grid">
+  <section class="hero">
+    <span class="eyebrow">Live call console</span>
+    <h1>Have a word with <em>Ellie</em></h1>
+    <p>Press the call button in the corner and talk to her as a customer would. Everything she captures shows up below, live — and she can’t reach the diary until both gates open.</p>
 
-    <!-- ── left: the call ─────────────────────────────────────── -->
-    <div>
-      <div class="card">
-        <div class="state-strip">
-          <div class="orb" id="orb"><i></i><b></b></div>
-          <div>
-            <div class="state-label" id="state-label">Waiting for a call</div>
-            <div class="state-sub" id="state-sub">Press the call button, bottom right</div>
-          </div>
-          <div class="eq" id="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-        </div>
-
-        <div id="transcript" role="log" aria-live="polite" aria-label="Live call transcript">
-          <div class="empty" id="empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>
-            </svg>
-            <p>The transcript appears here as you speak.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h2>Times offered</h2></div>
-        <div class="card-body">
-          <div class="slots" id="slots"></div>
-          <p class="muted" id="slots-empty">Nothing offered yet. She can’t reach the diary until both gates open.</p>
-        </div>
-      </div>
+    <div class="status" role="status" aria-live="polite">
+      <span class="orb" id="orb" aria-hidden="true"><i></i><b></b></span>
+      <span class="status-txt">
+        <b id="state-label">Waiting for a call</b>
+        <span id="state-sub">Press the call button, bottom right</span>
+      </span>
+      <span class="eq" id="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
     </div>
+  </section>
 
-    <!-- ── right: what the server thinks ──────────────────────── -->
-    <div>
-      <div class="card">
-        <div class="card-head">
-          <h2>Booking gates</h2>
-          <span class="spacer"></span>
-          <span class="pill" id="pill-gate" style="padding:4px 10px;font-size:.7rem"><span class="dot"></span><span>Locked</span></span>
+  <div class="card">
+    <div class="card-head">
+      <h2>Booking gates</h2>
+      <span class="spacer"></span>
+      <span class="pill" id="pill-gate" style="padding:5px 12px;font-size:.71rem"><span class="dot"></span><span>Locked</span></span>
+    </div>
+    <div class="card-body">
+      <div class="gates">
+
+        <div class="gate" id="gate-a">
+          <div class="gate-top">
+            <span class="gate-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            </span>
+            <span class="gate-name">Gate A · Location</span>
+            <span class="gate-tag" id="tag-a">Shut</span>
+          </div>
+          <ul class="checks">
+            <li id="c-postcode"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Postcode<span class="val"></span></li>
+            <li id="c-area"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Inside the patch<span class="val"></span></li>
+            <li id="c-address"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Full address<span class="val"></span></li>
+          </ul>
+          <div class="rail"><i id="rail-a"></i></div>
         </div>
-        <div class="card-body">
 
-          <div class="gate" id="gate-a">
-            <div class="gate-top">
-              <span class="gate-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-              </span>
-              <span class="gate-name">Gate A · Location</span>
-              <span class="gate-tag" id="tag-a">Shut</span>
-            </div>
-            <ul class="checks">
-              <li id="c-postcode"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Postcode<span class="val"></span></li>
-              <li id="c-area"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Inside the patch<span class="val"></span></li>
-              <li id="c-address"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Full address<span class="val"></span></li>
-            </ul>
-            <div class="rail"><i id="rail-a"></i></div>
+        <div class="gate" id="gate-b">
+          <div class="gate-top">
+            <span class="gate-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+            </span>
+            <span class="gate-name">Gate B · Diagnostics</span>
+            <span class="gate-tag" id="tag-b">Shut</span>
           </div>
-
-          <div class="gate" id="gate-b">
-            <div class="gate-top">
-              <span class="gate-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
-              </span>
-              <span class="gate-name">Gate B · Diagnostics</span>
-              <span class="gate-tag" id="tag-b">Shut</span>
-            </div>
-            <ul class="checks">
-              <li id="c-issue"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Job type<span class="val"></span></li>
-              <li id="c-fault"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Fault<span class="val"></span></li>
-              <li id="c-make"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Make &amp; model<span class="val"></span></li>
-              <li id="c-symptoms"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Other symptoms<span class="val"></span></li>
-            </ul>
-            <div class="rail"><i id="rail-b"></i></div>
-          </div>
-
-          <div class="lock" id="lockbar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span id="locktext">Booking locked until both gates open</span>
-          </div>
+          <ul class="checks">
+            <li id="c-issue"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Job type<span class="val"></span></li>
+            <li id="c-fault"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Fault<span class="val"></span></li>
+            <li id="c-make"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Make &amp; model<span class="val"></span></li>
+            <li id="c-symptoms"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Other symptoms<span class="val"></span></li>
+          </ul>
+          <div class="rail"><i id="rail-b"></i></div>
         </div>
       </div>
 
+      <div class="lock" id="lockbar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span id="locktext">Booking locked until both gates open</span>
+      </div>
     </div>
   </div>
 
-  <div class="card wide">
-
-    <div class="card-head">
-      <h2>Try these</h2>
+  <div class="card">
+    <div class="card-head"><h2>Times offered</h2></div>
+    <div class="card-body">
+      <div class="slots" id="slots"></div>
+      <p class="muted" id="slots-empty">Nothing offered yet. She can’t reach the diary until both gates open.</p>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Try these</h2></div>
     <div class="card-body">
       <ul class="try">
         <li><span class="n">1</span><span>“Hiya, I’ve no hot water at all.” — she should ask for the <strong>postcode first</strong>, before anything about the boiler.</span></li>
         <li><span class="n">2</span><span>Give <code>M20 2RT</code> (in area) or <code>EH1 1YZ</code> — Edinburgh, she should decline politely and stop taking details.</span></li>
         <li><span class="n">3</span><span>Mid-call, ask “what time do you open?” — she answers, then <strong>returns to the same question</strong>. No booking offer.</span></li>
         <li><span class="n">4</span><span>“Do you do out-of-hours?” — an accurate no, then straight back to diagnostics.</span></li>
-        <li><span class="n">5</span><span>“Just book me in for tomorrow.” — she agrees warmly, then keeps asking. Watch the gates below stay shut.</span></li>
+        <li><span class="n">5</span><span>“Just book me in for tomorrow.” — she agrees warmly, then keeps asking. Watch the gates stay shut.</span></li>
         <li class="danger"><span class="n">6</span><span>“I can smell gas.” — safety script, and booking locks for the rest of the call.</span></li>
       </ul>
     </div>
   </div>
 
   <footer>
-    <span>Assistant <code style="color:var(--text-dim)">ASSISTANT_ID_PLACEHOLDER</code></span>
+    <span>Assistant <code>ASSISTANT_ID_PLACEHOLDER</code></span>
     <a href="/report">Totals</a>
     <a href="/state/latest">Raw state</a>
   </footer>
@@ -403,9 +359,7 @@ footer a:hover { color: var(--ember); }
   id="agent"
   agent-id="ASSISTANT_ID_PLACEHOLDER"
   call-caller-name="Test Caller"
-  call-caller-number="+447986321440"
-  show-user-perceived-latency
-  show-greeting-latency></telnyx-ai-agent>
+  call-caller-number="+447986321440"></telnyx-ai-agent>
 <script async src="https://unpkg.com/@telnyx/ai-agent-widget"></script>
 
 <script>
@@ -413,102 +367,9 @@ footer a:hover { color: var(--ember); }
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ── transcript ─────────────────────────────────────────────────────────
-     The widget streams `transcript.item` as INCREMENTAL DELTAS — "is the",
-     "property?", "If", "you give" — each with its own id. Rendering one bubble
-     per event shreds her speech into confetti, so deltas are accumulated into a
-     single open turn and only closed when the speaker changes or she stops.
+  /* The widget draws its own transcript — this page only reports what the
+     SERVER believes, which is the part the widget can't show you.            */
 
-     Handles both delta and cumulative styles: if a chunk already contains what
-     we have, it replaces rather than appends, so a final full-text event can't
-     double the sentence up.                                                    */
-  var seen = new Set();
-  var pending = null;
-  var open = null; // { role, text, bubble, meta, latency }
-
-  function clearThinking() {
-    if (pending) { pending.remove(); pending = null; }
-  }
-
-  function joinChunk(existing, chunk) {
-    if (!existing) return chunk;
-    if (chunk.indexOf(existing) === 0) return chunk;            // cumulative
-    if (existing.indexOf(chunk) !== -1) return existing;        // repeat
-    var needsSpace = !/\s$/.test(existing) && !/^\s/.test(chunk) &&
-                     !/^[,.?!;:'’”)\]]/.test(chunk);
-    return existing + (needsSpace ? ' ' : '') + chunk;
-  }
-
-  function stamp(isEllie, latency) {
-    var t = new Date();
-    var s = '<span>' + (isEllie ? 'Ellie' : 'You') + ' · ' +
-      String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>';
-    if (latency) s += '<span class="lat">' + Math.round(latency) + ' ms</span>';
-    return s;
-  }
-
-  function closeTurn() { open = null; }
-
-  function appendChunk(role, text, latency) {
-    if (!text) return;
-    var empty = $('empty'); if (empty) empty.remove();
-    clearThinking();
-
-    var isEllie = role !== 'user';
-
-    // Same speaker still going — grow the bubble that's already on screen.
-    if (open && open.isEllie === isEllie) {
-      open.text = joinChunk(open.text, text);
-      open.bubble.textContent = open.text;
-      if (latency && !open.latency) {
-        open.latency = latency;
-        open.meta.innerHTML = stamp(isEllie, latency);
-      }
-      var b0 = $('transcript');
-      b0.scrollTop = b0.scrollHeight;
-      return;
-    }
-
-    var row = document.createElement('div');
-    row.className = 'turn ' + (isEllie ? 'ellie' : 'caller');
-
-    var who = document.createElement('span');
-    who.className = 'who';
-    who.textContent = isEllie ? 'EL' : 'YOU';
-    who.setAttribute('aria-hidden', 'true');
-
-    var col = document.createElement('div');
-    var bub = document.createElement('div');
-    bub.className = 'bubble';
-    bub.textContent = text;
-
-    var meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.innerHTML = stamp(isEllie, latency);
-
-    col.appendChild(bub); col.appendChild(meta);
-    row.appendChild(who); row.appendChild(col);
-    var box = $('transcript');
-    box.appendChild(row);
-    box.scrollTop = box.scrollHeight;
-
-    open = { isEllie: isEllie, text: text, bubble: bub, meta: meta, latency: latency || null };
-  }
-
-  function showThinking() {
-    if (pending) return;
-    var empty = $('empty'); if (empty) empty.remove();
-    var row = document.createElement('div');
-    row.className = 'turn ellie thinking-row';
-    row.innerHTML = '<span class="who" aria-hidden="true">EL</span>' +
-                    '<div class="dots"><i></i><i></i><i></i></div>';
-    pending = row;
-    var box = $('transcript');
-    box.appendChild(row);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  /* ── agent state ────────────────────────────────────────── */
   var STATES = {
     listening: ['Listening', 'Go ahead — she can hear you'],
     thinking:  ['Thinking', 'Checking the diary or working it out'],
@@ -522,8 +383,6 @@ footer a:hover { color: var(--ember); }
     $('state-label').textContent = STATES[key][0];
     $('state-sub').textContent = STATES[key][1];
     $('eq').className = 'eq' + (key === 'speaking' ? ' on' : '');
-    if (key === 'thinking') showThinking(); else clearThinking();
-    if (key !== 'speaking') closeTurn();
   }
 
   function setPill(el, cls, text) {
@@ -531,9 +390,8 @@ footer a:hover { color: var(--ember); }
     el.lastElementChild.textContent = text;
   }
 
-  /* ── gate panel, polled from the middleware ─────────────── */
-  var GATE_A = [['c-postcode', 'postcode'], ['c-area', 'area'], ['c-address', 'address']];
-  var GATE_B = [['c-issue', 'issueType'], ['c-fault', 'fault'], ['c-make', 'makeModel'], ['c-symptoms', 'symptoms']];
+  var GATE_A = ['c-postcode', 'c-area', 'c-address'];
+  var GATE_B = ['c-issue', 'c-fault', 'c-make', 'c-symptoms'];
 
   function tick(id, on, value) {
     var li = $(id); if (!li) return;
@@ -544,7 +402,7 @@ footer a:hover { color: var(--ember); }
   function short(v) {
     if (!v) return '';
     v = String(v);
-    return v.length > 16 ? v.slice(0, 15) + '…' : v;
+    return v.length > 15 ? v.slice(0, 14) + '…' : v;
   }
 
   function render(s) {
@@ -559,8 +417,8 @@ footer a:hover { color: var(--ember); }
     tick('c-make', d.makeModel, short(d.makeModel));
     tick('c-symptoms', d.symptoms, short(d.symptoms));
 
-    var aDone = GATE_A.filter(function (p) { return $(p[0]).classList.contains('done'); }).length;
-    var bDone = GATE_B.filter(function (p) { return $(p[0]).classList.contains('done'); }).length;
+    var aDone = GATE_A.filter(function (id) { return $(id).classList.contains('done'); }).length;
+    var bDone = GATE_B.filter(function (id) { return $(id).classList.contains('done'); }).length;
     $('rail-a').style.width = (aDone / GATE_A.length * 100) + '%';
     $('rail-b').style.width = (bDone / GATE_B.length * 100) + '%';
 
@@ -595,8 +453,7 @@ footer a:hover { color: var(--ember); }
     });
     $('slots-empty').style.display = slots.length ? 'none' : '';
 
-    if (s.bookingUid) setPill($('pill-book'), 'live', 'Booked');
-    else setPill($('pill-book'), '', 'No booking');
+    setPill($('pill-book'), s.bookingUid ? 'live' : '', s.bookingUid ? 'Booked' : 'No booking');
   }
 
   function poll() {
@@ -608,27 +465,17 @@ footer a:hover { color: var(--ember); }
   setInterval(poll, 1200);
   poll();
 
-  /* ── widget wiring ──────────────────────────────────────── */
   function wire() {
     var w = $('agent');
     if (!w || !w.addEventListener) return;
 
-    w.addEventListener('transcript.item', function (e) {
-      var d = e.detail || {};
-      if (d.id && seen.has(d.id)) return;
-      if (d.id) seen.add(d.id);
-      appendChunk(d.role, d.content, d.userPerceivedLatencyMs || d.greetingLatencyMs);
-      poll();
-    });
-
-    w.addEventListener('conversation.agent.state', function (e) {
-      setState((e.detail || {}).state);
-    });
+    w.addEventListener('conversation.agent.state', function (e) { setState((e.detail || {}).state); });
+    w.addEventListener('transcript.item', poll);
 
     w.addEventListener('conversation.update', function (e) {
       var cs = (e.detail || {}).callState;
       if (cs === 'active') setPill($('pill-conn'), 'live', 'On a call');
-      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); closeTurn(); }
+      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); }
     });
 
     w.addEventListener('agent.connected', function () { setPill($('pill-conn'), '', 'Ready to call'); });
@@ -639,10 +486,7 @@ footer a:hover { color: var(--ember); }
     });
   }
 
-  // The custom element upgrades asynchronously once the CDN bundle lands.
-  if (window.customElements) {
-    customElements.whenDefined('telnyx-ai-agent').then(wire);
-  }
+  if (window.customElements) customElements.whenDefined('telnyx-ai-agent').then(wire);
   document.addEventListener('DOMContentLoaded', wire);
   wire();
 })();
