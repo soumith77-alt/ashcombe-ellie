@@ -80,14 +80,16 @@ const SCENARIOS = {
     await reset();
     const { transcript } = await run(
       [
-        "No heating at all. It's M20 2RT, 14 Oak Road, Didsbury.",
-        "It's a repair. All the radiators are stone cold.",
-        "It's a Worcester Bosch. No code showing. Nothing else I can see.",
+        "No heating at all. It's M20 2RT, 14 Oak Road.",
+        "It's a Worcester Bosch gas combi.",
+        "It's my own place.",
+        "It's broken — a repair. All the radiators are stone cold.",
+        'No code showing. Nothing else I can see.',
         'Have you got anything Wednesday?',
       ],
       { name: 'bug2', quiet: true }
     );
-    const reply = transcript[3].ellie;
+    const reply = transcript[transcript.length - 1].ellie;
 
     check('bug2', 'offers concrete times in the same turn', TIME_OFFER.test(reply), reply);
     check('bug2', 'does not loop back with "what time would you like"', !/what time (would|do) you|which time did you have in mind/i.test(reply), reply);
@@ -178,6 +180,7 @@ const SCENARIOS = {
     const { transcript } = await run(
       ['Just book me in for tomorrow, I don\'t know anything about the boiler',
        "It's M20 2RT, 14 Oak Road",
+       "It's a gas boiler. My own place.",
        "I told you, I don't know. It's a repair, it's just not firing up.",
        'No idea on the make. No code. Nothing else.'],
       { name: 'pushy', quiet: true }
@@ -218,7 +221,9 @@ const SCENARIOS = {
         // `exclude` matters here: she says "your email address?", which would
         // otherwise match the address rule and loop the caller forever.
         { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road, Didsbury.' },
-        { match: /repair.*service|service.*repair|new boiler|kind of job/i, reply: "It's a repair." },
+        { match: /what have you got|gas boiler.*something else|what.*system/i, reply: "It's a Worcester Bosch gas combi." },
+        { match: /own place|tenant|landlord|calling as/i, reply: "It's my own place." },
+        { match: /broken|repair.*service|service.*repair|new boiler|kind of job/i, reply: "It's broken — a repair." },
         { match: /heating.*(alright|too|still)|radiators/i, reply: "The heating's still working fine, it's just the hot water." },
         // Answers make AND code together — she often asks for both in one breath,
         // and a fixed answer to only the first half loses the code entirely.
@@ -290,7 +295,9 @@ const SCENARIOS = {
     const state = require('../src/state');
     const tools = require('../src/tools');
     const setup = state.get('setup-move', '+447700900123');
-    Object.assign(setup.location, { address: '9 Elm Grove, Sale', postcode: 'M33 1AA', inArea: true });
+    Object.assign(setup.location, { addressLine1: '9 Elm Grove', addressExtra: 'Sale', postcode: 'M33 1AA', inArea: true });
+    setup.systemCovered = true; setup.systemType = 'Baxi gas combi';
+    setup.callerRelationship = 'owner'; setup.lane = 'repair';
     Object.assign(setup.diagnostics, { issueType: 'repair', fault: 'boiler cutting out', makeModel: 'Baxi', symptoms: 'not given' });
     Object.assign(setup.contact, { name: 'Margaret Hollis', phone: '07700 900123', email: 'manyamsoumithreddy@gmail.com' });
 
@@ -445,6 +452,7 @@ const SCENARIOS = {
     const { transcript } = await run(
       [
         "No heating. It's M20 2RT, 14 Oak Road.",
+        "It's a gas boiler, and it's my own place.",
         "It's a repair, radiators are all cold.",
         'No idea what make it is.',
         "Can't see any code, no.",

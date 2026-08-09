@@ -1,36 +1,153 @@
 {
   "_comment": "What Ashcombe's engineers are qualified for. Gas only. Anything not clearly covered is declined BEFORE any fault detail is taken — taking the whole story and declining afterwards wastes the caller's time and makes us look disorganised. Edit this file to widen the scope; no code change needed.",
-
   "covered": {
     "_comment": "Matched against what the caller says they have. Make names count as gas boilers — most people answer 'what have you got?' with a brand.",
     "patterns": [
-      "gas boiler", "boiler", "combi", "combination boiler", "system boiler",
-      "conventional boiler", "regular boiler", "back boiler", "condensing",
-      "gas fire", "fire", "gas hob", "hob", "gas cooker", "cooker", "gas oven",
-      "central heating", "radiator", "hot water cylinder", "megaflo", "unvented",
-      "worcester", "bosch", "vaillant", "baxi", "ideal", "glow worm", "glow-worm",
-      "viessmann", "potterton", "alpha", "ferroli", "vokera", "ariston",
-      "main", "biasi", "intergas", "atag", "keston", "halstead", "saunier duval"
+      "gas boiler",
+      "boiler",
+      "combi",
+      "combination boiler",
+      "system boiler",
+      "conventional boiler",
+      "regular boiler",
+      "back boiler",
+      "condensing",
+      "gas fire",
+      "fire",
+      "gas hob",
+      "hob",
+      "gas cooker",
+      "cooker",
+      "gas oven",
+      "central heating",
+      "radiator",
+      "hot water cylinder",
+      "megaflo",
+      "unvented",
+      "worcester",
+      "bosch",
+      "vaillant",
+      "baxi",
+      "ideal",
+      "glow worm",
+      "glow-worm",
+      "viessmann",
+      "potterton",
+      "alpha",
+      "ferroli",
+      "vokera",
+      "ariston",
+      "main",
+      "biasi",
+      "intergas",
+      "atag",
+      "keston",
+      "halstead",
+      "saunier duval"
     ]
   },
-
   "notCovered": {
     "_comment": "Declined politely, with the trade they actually need. Each entry gives the reason said aloud.",
     "items": [
-      { "patterns": ["air con", "air-con", "aircon", "air conditioning", "aircondition", "split unit", "ac unit"],
-        "say": "air conditioning isn't something we cover I'm afraid — we're heating and hot water, so it'd need a refrigeration engineer rather than us" },
-      { "patterns": ["heat pump", "air source", "ground source", "ashp", "gshp"],
-        "say": "heat pumps aren't something we cover I'm afraid — you'd need an engineer who's qualified on renewables" },
-      { "patterns": ["oil boiler", "oil fired", "oil-fired", "oil", "kerosene"],
-        "say": "oil boilers aren't something we cover I'm afraid — we're gas only, so you'd need an OFTEC registered engineer" },
-      { "patterns": ["lpg", "propane", "bottled gas"],
-        "say": "LPG isn't something we cover I'm afraid — we're mains gas only" },
-      { "patterns": ["storage heater", "night storage", "economy 7", "electric heater", "electric boiler", "immersion"],
-        "say": "electric heating isn't something we cover I'm afraid — that'd be an electrician rather than a gas engineer" },
-      { "patterns": ["solar", "photovoltaic", "pv panel", "thermal panel"],
-        "say": "solar isn't something we cover I'm afraid — you'd need a solar installer" },
-      { "patterns": ["aga", "range cooker", "biomass", "wood burner", "log burner", "stove"],
-        "say": "that's not something we cover I'm afraid — it needs a specialist rather than a gas heating engineer" }
+      {
+        "patterns": [
+          "air con",
+          "air-con",
+          "aircon",
+          "air conditioning",
+          "aircondition",
+          "split unit",
+          "ac unit"
+        ],
+        "say": "air conditioning isn't something we cover I'm afraid — we're heating and hot water, so it'd need a refrigeration engineer rather than us"
+      },
+      {
+        "patterns": [
+          "heat pump",
+          "air source",
+          "ground source",
+          "ashp",
+          "gshp"
+        ],
+        "say": "heat pumps aren't something we cover I'm afraid — you'd need an engineer who's qualified on renewables"
+      },
+      {
+        "patterns": [
+          "oil boiler",
+          "oil fired",
+          "oil-fired",
+          "oil",
+          "kerosene"
+        ],
+        "say": "oil boilers aren't something we cover I'm afraid — we're gas only, so you'd need an OFTEC registered engineer"
+      },
+      {
+        "patterns": [
+          "lpg",
+          "propane",
+          "bottled gas"
+        ],
+        "say": "LPG isn't something we cover I'm afraid — we're mains gas only"
+      },
+      {
+        "patterns": [
+          "storage heater",
+          "night storage",
+          "economy 7",
+          "electric heater",
+          "electric boiler",
+          "immersion"
+        ],
+        "say": "electric heating isn't something we cover I'm afraid — that'd be an electrician rather than a gas engineer"
+      },
+      {
+        "patterns": [
+          "solar",
+          "photovoltaic",
+          "pv panel",
+          "thermal panel"
+        ],
+        "say": "solar isn't something we cover I'm afraid — you'd need a solar installer"
+      },
+      {
+        "patterns": [
+          "aga",
+          "range cooker",
+          "biomass",
+          "wood burner",
+          "log burner",
+          "stove"
+        ],
+        "say": "that's not something we cover I'm afraid — it needs a specialist rather than a gas heating engineer"
+      }
+    ]
+  },
+  "makes": {
+    "_comment": "Manufacturer names. When a caller answers 'what have you got?' with a brand, that IS the make — asking for it again a minute later is the clearest sign of not listening.",
+    "patterns": [
+      "worcester",
+      "bosch",
+      "vaillant",
+      "baxi",
+      "ideal",
+      "glow worm",
+      "glow-worm",
+      "viessmann",
+      "potterton",
+      "alpha",
+      "ferroli",
+      "vokera",
+      "ariston",
+      "biasi",
+      "intergas",
+      "atag",
+      "keston",
+      "halstead",
+      "saunier duval",
+      "greenstar",
+      "logic",
+      "vitodens",
+      "ecotec"
     ]
   }
 }

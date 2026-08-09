@@ -69,7 +69,12 @@ function check(description) {
   }
 
   const hit = systems.covered.patterns.find((p) => mentions(text, p));
-  if (hit) return { covered: true, matched: hit, say: '' };
+  if (hit) {
+    // If they named a brand, that IS the make. Asking for it again a minute
+    // later is the clearest possible sign of not having listened.
+    const make = (systems.makes.patterns || []).find((m) => mentions(text, m));
+    return { covered: true, matched: hit, make: make || null, say: '' };
+  }
 
   return {
     covered: 'unclear',

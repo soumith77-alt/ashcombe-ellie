@@ -104,6 +104,11 @@ function checkSystemType(s, body) {
   });
 
   if (r.covered === true) {
+    // Carry a volunteered brand straight into the make, so the repair lane never
+    // asks for something the caller has already told us.
+    if (r.make && !state.isAnswered(s.diagnostics.makeModel)) {
+      s.diagnostics.makeModel = String(body.systemDescription || '').trim();
+    }
     const next = nextQuestion(s);
     return { ok: true, covered: true, say: next.say };
   }
