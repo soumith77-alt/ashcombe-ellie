@@ -12,7 +12,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "setup:calcom": "node scripts/setup-calcom.js",
-    "setup:telnyx": "node scripts/setup-telnyx.js"
+    "setup:telnyx": "node scripts/setup-telnyx.js",
+    "setup:workflows": "node scripts/setup-calcom-workflows.js"
   },
   "keywords": [],
   "author": "",
