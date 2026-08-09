@@ -237,7 +237,7 @@ function logBooking(state, label, engineerNotes) {
     row: [
       nowIso(), 'Booked', clean(label),
       clean(state.contact.name), clean(state.contact.phone), clean(state.contact.email),
-      [clean(state.location.addressLine1), clean(state.location.addressExtra)].filter(Boolean).join(', '),
+      clean(state.location.addressLine1),
       clean(state.location.postcode),
       clean(state.lane), clean(state.callerRelationship), clean(state.systemType),
       clean(state.diagnostics.issueType || state.diagnostics.serviceType),

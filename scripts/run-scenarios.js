@@ -298,7 +298,7 @@ const SCENARIOS = {
     const state = require('../src/state');
     const tools = require('../src/tools');
     const setup = state.get('setup-move', '+447700900123');
-    Object.assign(setup.location, { addressLine1: '9 Elm Grove', addressExtra: 'Sale', postcode: 'M33 1AA', inArea: true });
+    Object.assign(setup.location, { addressLine1: '9 Elm Grove, Sale', postcode: 'M33 1AA', inArea: true });
     setup.systemCovered = true; setup.systemType = 'Baxi gas combi';
     setup.callerRelationship = 'owner'; setup.lane = 'repair';
     Object.assign(setup.diagnostics, { issueType: 'repair', fault: 'boiler cutting out', makeModel: 'Baxi', symptoms: 'not given' });
@@ -448,6 +448,47 @@ const SCENARIOS = {
       !/should be with you|on his way|about \d+ minutes|within the hour|shortly after/i.test(text), text.slice(0, 300));
     check('engineerEta', 'offers an office callback', /ring you|call you|get back to you|office/i.test(text), text.slice(0, 300));
     check('engineerEta', 'does not book a new visit', !TIME_OFFER.test(text), text.slice(0, 300));
+  },
+
+/**
+   * The client's report: "it keeps looping and asking me if I'm the home owner /
+   * what my address is". Asserts across the whole call that no question comes
+   * back three times.
+   */
+  async noLoop() {
+    await reset();
+    const { transcript } = await runAdaptive(
+      [
+        { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road, Didsbury.' },
+        { match: /what have you got|gas boiler|something else|what.*system/i, reply: "It's a gas boiler, a Worcester." },
+        { match: /own place|tenant|landlord|calling as/i, reply: "It's my own house." },
+        { match: /broken|service|new boiler|kind of/i, reply: "It's broken — no hot water." },
+        { match: /heating.*(alright|too|still)|radiators/i, reply: 'The heating still works, just no hot water.' },
+        { match: /make|worcester.*baxi/i, reply: "It's a Worcester." },
+        { match: /code|display|gc number/i, reply: 'No code showing.' },
+        { match: /anything else|noticed|water underneath|pilot/i, reply: "Nothing else I can see." },
+        { match: /how long|constant|come and go/i, reply: 'Since yesterday, constant.' },
+        { match: /anyone else|looked at it/i, reply: 'No, nobody.' },
+        { match: /what day|day suits|morning or afternoon/i, reply: 'Wednesday morning.' },
+      ],
+      { name: 'noLoop', opener: "Hi, I'd like to book someone out, my boiler's not working.", quiet: true, maxTurns: 18 }
+    );
+
+    // Normalise so wording variations of the same question still count together.
+    const key = (t) => t.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 44);
+    const counts = {};
+    for (const t of transcript) { const k = key(t.ellie); counts[k] = (counts[k] || 0) + 1; }
+    const worst = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || ['', 0];
+
+    check('noLoop', 'no question is asked three times', worst[1] < 3, `"${worst[0]}" x${worst[1]}`);
+
+    const st = await stateOf();
+    if (st) {
+      check('noLoop', 'the address was accepted first time', Boolean(st.location.addressLine1), JSON.stringify(st.location));
+      check('noLoop', 'the system check actually ran', st.systemCovered === true, String(st.systemCovered));
+      check('noLoop', 'reached the diary', st.gate.A === true && st.gate.B === true, JSON.stringify(st.gate));
+    }
   },
 
   async dontKnow() {

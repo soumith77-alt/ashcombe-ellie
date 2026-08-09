@@ -27,8 +27,7 @@ function fresh(id = 'test-call') {
 }
 
 function fullyQualified(s) {
-  s.location.addressLine1 = '14 Oak Road';
-  s.location.addressExtra = 'Didsbury';
+  s.location.addressLine1 = '14 Oak Road, Didsbury';
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
   s.systemCovered = true;
@@ -71,7 +70,6 @@ test('the town is never required and never asked for', () => {
   tools.checkServiceArea(s, { postcode: 'M20 2RT' });
 
   assert.equal(state.gateA(s), true, 'Gate A must open with no further address question');
-  assert.equal(s.location.addressExtra, null, 'nothing invented');
   assert.ok(!state.missingFields(s).some((f) => /address/i.test(f)),
     'no outstanding address question');
   assert.ok(!/address|town|street/i.test(tools.nextQuestionTool(s).say),
@@ -442,4 +440,65 @@ test('an unknown lane name cannot open gate B', () => {
   s.systemCovered = true;
   s.lane = 'somethingElse';
   assert.equal(state.gateB(s), false);
+});
+
+/* ------------------------------------------------- the question-loop family */
+
+test('recording the system through record_details opens the check (loop 1)', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: '14 Oak Road' });
+
+  // The model has two doors to this answer; both must turn the same lock.
+  const r = tools.recordDetails(s, { systemType: 'gas boiler' });
+  assert.equal(s.systemCovered, true, 'record_details must run the system check too');
+  assert.ok(!/what have you got/i.test(r.say), `must not re-ask: "${r.say}"`);
+});
+
+test('the whole address in one field satisfies gate A (loop 2)', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: 'Flat 2, 14 Oak Road, Didsbury' });
+  assert.equal(state.gateA(s), true);
+
+  // Whatever key the model reaches for, the address must land somewhere that counts.
+  const b = fresh('alt');
+  tools.checkServiceArea(b, { postcode: 'M20 2RT' });
+  tools.recordDetails(b, { address: '14 Oak Road' });
+  assert.equal(state.gateA(b), true, 'the legacy field name must still work');
+});
+
+test('no question is ever asked a third time (loop 3)', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: '14 Oak Road', systemType: 'gas boiler' });
+
+  const asked = [];
+  for (let i = 0; i < 8; i++) {
+    const r = tools.recordDetails(s, {});   // she asked; the caller gave nothing
+    asked.push(r.say);
+  }
+  const counts = asked.reduce((m, say) => { m[say] = (m[say] || 0) + 1; return m; }, {});
+  const worst = Math.max(...Object.values(counts));
+  assert.ok(worst <= 3, `the same question came back ${worst} times: ${JSON.stringify(counts).slice(0, 200)}`);
+  assert.equal(s.callerRelationship, 'not given', 'a soft field is accepted as blank and the call moves on');
+});
+
+test('a hard blocker stops rather than looping', () => {
+  const s = fresh();
+  for (let i = 0; i < 5; i++) tools.nextQuestionTool(s);   // never gives a postcode
+
+  assert.equal(s.stuck, 'postcode');
+  const r = tools.nextQuestionTool(s);
+  assert.ok(/office/i.test(r.say), `should hand to the office: "${r.say}"`);
+  assert.equal(state.gateA(s), false, 'and must still never book');
+});
+
+test('the loop breaker cannot open a gate on its own', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'repair';
+  // Exhaust every soft field; `fault` is a hard blocker and must still hold.
+  for (let i = 0; i < 12; i++) tools.nextQuestionTool(s);
+  assert.equal(state.gateB(s), false, 'giving up on questions must never mean booking anyway');
 });

@@ -30,6 +30,48 @@ const LANE_FIELDS = {
 
 const LANES = Object.keys(LANE_FIELDS);
 
+/**
+ * The loop breaker.
+ *
+ * Asked twice and still empty, a question is not going to be answered by asking a
+ * third time. Soft fields are the ones the brief already lets a caller leave blank
+ * — none of them stops an engineer working, so we record "not given" and move on.
+ * Hard blockers genuinely prevent a visit, so we stop and hand to the office
+ * rather than trapping someone in the same question forever.
+ */
+const MAX_ASKS = 2;
+const SOFT_FIELDS = new Set([
+  'makeModel', 'symptoms', 'callerRelationship',
+  'applianceCount', 'bedrooms', 'duration', 'previousWork',
+]);
+const HARD_BLOCKERS = new Set([
+  'postcode', 'addressLine1', 'fault', 'serviceType', 'currentSystem',
+  'systemType',  // we cannot send an engineer to something we can't identify
+  'lane',        // if we can't tell what they want, we can't book the right visit
+]);
+
+/**
+ * Record that we asked for `field` and got nothing new. Returns what to do:
+ * "ask" (carry on), "fill" (accept not given), or "stop" (hand to the office).
+ */
+function noteAsked(state, field) {
+  if (!field) return 'ask';
+  state.asked[field] = (state.asked[field] || 0) + 1;
+  if (state.asked[field] <= MAX_ASKS) return 'ask';
+
+  if (SOFT_FIELDS.has(field)) {
+    if (field === 'callerRelationship') state.callerRelationship = 'not given';
+    else state.diagnostics[field] = 'not given';
+    return 'fill';
+  }
+  // Anything not explicitly soft stops the loop. Defaulting to "keep asking" is
+  // what let `lane` repeat forever after the first two loops were fixed — the
+  // same bug, one field along. Failing closed means a new field added tomorrow
+  // degrades into an office handoff rather than trapping a caller.
+  state.stuck = field;
+  return 'stop';
+}
+
 // Kept for the repair lane's own question set and for older callers of this module.
 const DIAGNOSTIC_FIELDS = LANE_FIELDS.repair;
 
@@ -45,11 +87,11 @@ function newState(conversationId, callerNumber) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
 
-    // First line plus postcode is what a Gas Safe engineer needs to find a
-    // property, and what the office would write down. Anything more is a
-    // requirement we invented. addressExtra holds whatever the caller volunteers
-    // — town, flat number — and is never asked for and never gates.
-    location: { addressLine1: null, postcode: null, addressExtra: null, inArea: null },
+    // One address field, plus the postcode. That is what a Gas Safe engineer
+    // needs to find a property and what the office would write down. A second
+    // optional field only created somewhere for the address to land where it
+    // didn't count, which loops the caller on a question they already answered.
+    location: { addressLine1: null, postcode: null, inArea: null },
 
     // Which kind of call this is, and what they've actually got. Both are decided
     // before any lane questions, and both can end the call on their own.
@@ -92,6 +134,11 @@ function newState(conversationId, callerNumber) {
     foundBooking: null,
 
     isExistingCustomer: false,
+    // How many times we have asked for each field and got nowhere. Nothing else
+    // in this service has any memory of what has already been said, which is how
+    // one unrecorded field became an unbounded loop.
+    asked: {},
+    stuck: null,
     outcome: null,
     events: [],
   };
@@ -214,4 +261,8 @@ module.exports = {
   DIAGNOSTIC_FIELDS,
   LANE_FIELDS,
   LANES,
+  noteAsked,
+  MAX_ASKS,
+  SOFT_FIELDS,
+  HARD_BLOCKERS,
 };

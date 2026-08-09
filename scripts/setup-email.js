@@ -37,7 +37,7 @@ const state = require('../src/state');
   }
 
   const s = state.get('email-sample', '+447700900123');
-  Object.assign(s.location, { addressLine1: '14 Oak Road', addressExtra: 'Didsbury', postcode: 'M20 2RT', inArea: true });
+  Object.assign(s.location, { addressLine1: '14 Oak Road, Didsbury', postcode: 'M20 2RT', inArea: true });
   s.lane = 'repair'; s.systemType = 'Worcester Bosch combi'; s.callerRelationship = 'owner';
   Object.assign(s.diagnostics, {
     issueType: 'repair', fault: 'no hot water, heating still on',

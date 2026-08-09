@@ -1,6 +1,7 @@
 'use strict';
 
-const { missingFields } = require('./state');
+const state_ = require('./state');
+const { missingFields } = state_;
 const business = require('../config/business.json');
 
 /**
@@ -96,6 +97,15 @@ function nextQuestion(state) {
     return {
       missing,
       say: `I'm not certain that one's inside our patch. Best thing is to ring the office on ${business.officePhone} and they'll tell you straight away.`,
+    };
+  }
+
+  // Already handed to the office on this field: say so, don't ask again.
+  if (state.stuck) {
+    return {
+      missing,
+      stuck: state.stuck,
+      say: `I'm not going to be able to get that over the phone, and I'd rather not guess it. Best thing is to ring the office on ${business.officePhone} and they'll get you sorted.`,
     };
   }
 

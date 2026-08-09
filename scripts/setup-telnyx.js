@@ -103,8 +103,7 @@ const TOOLS = [
     body: {
       type: 'object',
       properties: {
-        addressLine1: str('House number and street only, e.g. "14 Oak Road". Never ask for the town.'),
-        addressExtra: str('Town, flat number or anything else the caller volunteers. Never ask for this.'),
+        addressLine1: str('The address as the caller gave it, e.g. "14 Oak Road" or "Flat 2, 14 Oak Road, Didsbury". One field — put all of it here. Never ask for the town separately.'),
         postcode: str('Postcode.'),
         lane: str('Which kind of call this is: repair, service, newBoiler, existing, or emergency.'),
         callerRelationship: str('One of: owner, tenant, landlord, agent.'),

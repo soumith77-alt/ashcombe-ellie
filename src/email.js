@@ -59,8 +59,7 @@ const esc = (v) => String(v === null || v === undefined ? '' : v)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function addressOf(state) {
-  return [state.location.addressLine1, state.location.addressExtra, state.location.postcode]
-    .filter(Boolean).join(', ');
+  return [state.location.addressLine1, state.location.postcode].filter(Boolean).join(', ');
 }
 
 /** What the visit is called in plain English, per lane. */

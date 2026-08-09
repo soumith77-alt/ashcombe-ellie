@@ -53,11 +53,8 @@ function build(state) {
   ].filter(Boolean).join(' | ');
 
   const line2 = [
-    [
-      clean(state.location.addressLine1),
-      clean(state.location.addressExtra),
-      clean(state.location.postcode),
-    ].filter(Boolean).join(', '),
+    [clean(state.location.addressLine1), clean(state.location.postcode)]
+      .filter(Boolean).join(', '),
     clean(state.contact.phone),
   ].filter(Boolean).join(' | ');
 

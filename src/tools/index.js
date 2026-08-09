@@ -123,9 +123,13 @@ function checkSystemType(s, body) {
 /* -------------------------------------------------------- 2. next_question */
 
 function nextQuestionTool(s) {
+  // Asking "what next?" repeatedly and getting the same answer means the caller
+  // isn't going to give it. Count it, so the third time we do something else.
+  const before = state.missingFields(s)[0];
+  state.noteAsked(s, before);
   const { gateA, gateB } = gates(s);
   const next = nextQuestion(s);
-  return { ok: true, missing: next.missing, gateA, gateB, say: next.say };
+  return { ok: true, missing: next.missing, gateA, gateB, stuck: s.stuck || undefined, say: next.say };
 }
 
 /* -------------------------------------------------------- 3. record_details */
@@ -140,18 +144,30 @@ const CONTACT_KEYS = ['name', 'phone', 'email'];
 const TOP_KEYS = ['lane', 'callerRelationship', 'systemType'];
 
 function recordDetails(s, body) {
-  // `address` is still accepted and mapped, so a model that reaches for the old
-  // field name doesn't silently drop the one thing Gate A is waiting on.
-  const line1 = body.addressLine1 !== undefined ? body.addressLine1 : body.address;
-  if (line1 !== undefined && line1 !== null && String(line1).trim() !== '') {
-    s.location.addressLine1 = String(line1).trim();
-  }
-  if (body.addressExtra !== undefined && body.addressExtra !== null && String(body.addressExtra).trim() !== '') {
-    s.location.addressExtra = String(body.addressExtra).trim();
-  }
+  const outstandingBefore = state.missingFields(s)[0];
+
+  // There is ONE address field, and every name the model might reach for funnels
+  // into it. Whatever the caller said about where they live is the address —
+  // which key it arrived under is our problem, not theirs.
+  const line1 = [body.addressLine1, body.address, body.addressExtra]
+    .find((v) => v !== undefined && v !== null && String(v).trim() !== '');
+  if (line1 !== undefined) s.location.addressLine1 = String(line1).trim();
   for (const k of TOP_KEYS) {
     if (body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '') {
       s[k] = String(body[k]).trim();
+    }
+  }
+
+  // The system answer can arrive through this tool OR through system_type, and
+  // only one of them used to set the verdict the gate reads. That left the text
+  // recorded, the check never run, and next_question asking "what have you got?"
+  // on every single turn — the loop the client hit. Either door now turns the
+  // same lock.
+  if (body.systemType !== undefined && body.systemType !== null && String(body.systemType).trim() !== '') {
+    const r = systemType.check(body.systemType);
+    s.systemCovered = r.covered;
+    if (r.make && !state.isAnswered(s.diagnostics.makeModel)) {
+      s.diagnostics.makeModel = String(body.systemType).trim();
     }
   }
 
@@ -178,9 +194,15 @@ function recordDetails(s, body) {
 
   state.touch(s, { type: 'record', fields: Object.keys(body || {}) });
 
+  // Nothing moved: the same question is outstanding as before this call, so the
+  // caller has now been asked and hasn't answered. That is the signal the old
+  // code had no way to notice, and why one unset field looped forever.
+  const after = state.missingFields(s)[0];
+  if (after && after === outstandingBefore) state.noteAsked(s, after);
+
   const { gateA, gateB } = gates(s);
   const next = nextQuestion(s);
-  return { ok: true, gateA, gateB, missing: next.missing, say: next.say };
+  return { ok: true, gateA, gateB, missing: next.missing, stuck: s.stuck || undefined, say: next.say };
 }
 
 /* ----------------------------------------------------- 4. check_availability */
