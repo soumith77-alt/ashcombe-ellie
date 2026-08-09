@@ -125,6 +125,17 @@ app.get('/health', (_req, res) => {
   });
 });
 
+/** A flame, inline. Stops /favicon.ico 404-ing in the console someone is reading
+ *  while debugging a call that won't connect. */
+app.get('/favicon.ico', (_req, res) => {
+  res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="#C2570A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M12 22c4 0 7-2.6 7-6.4 0-3.9-3.2-6.2-4.6-9.6-.5 2-1.6 3-2.9 4-1.6-1.7-1.8-3.4-1.6-5' +
+    'C7 6.6 5 9.4 5 13.2 5 18 8 22 12 22Z"/></svg>'
+  );
+});
+
 /**
  * Click-to-talk test page. Browser voice against the live assistant, so there's
  * something to try while the account has no phone number.

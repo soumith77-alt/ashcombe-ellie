@@ -204,6 +204,22 @@ header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-
 .lock.stop { background: linear-gradient(90deg, var(--stop-w), #FFF8F7); border-color: rgba(180,38,15,.26); color: var(--stop); }
 .lock svg { width: 16px; height: 16px; flex: none; }
 
+/* Call failure banner. Both real failure modes — no microphone and no Telnyx
+   credit — otherwise look identical to "the button does nothing", which is
+   exactly what makes them so slow to diagnose.                               */
+.alert {
+  display: none; align-items: flex-start; gap: 12px;
+  max-width: 640px; margin: 22px auto 0; padding: 15px 18px;
+  border-radius: var(--r); text-align: left; font-size: .89rem;
+  background: linear-gradient(90deg, var(--stop-w), #FFF9F8);
+  border: 1px solid rgba(180,38,15,.28); color: #7A1A0A;
+  box-shadow: var(--shadow);
+}
+.alert.show { display: flex; }
+.alert svg { width: 17px; height: 17px; flex: none; margin-top: 2px; color: var(--stop); }
+.alert b { display: block; margin-bottom: 3px; color: var(--stop); }
+.alert code { background: #fff; border: 1px solid rgba(180,38,15,.2); border-radius: 5px; padding: .05em .4em; font-size: .9em; }
+
 /* ───────────────────────────────────────────────────────── slots */
 .slots { display: flex; flex-wrap: wrap; gap: 9px; }
 .slot {
@@ -273,6 +289,11 @@ footer code { font-size: .95em; }
         <span id="state-sub">Press the call button, bottom right</span>
       </span>
       <span class="eq" id="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+    </div>
+
+    <div class="alert" id="alert" role="alert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <span><b id="alert-title">Call didn't connect</b><span id="alert-body"></span></span>
     </div>
   </section>
 
@@ -359,7 +380,8 @@ footer code { font-size: .95em; }
   id="agent"
   agent-id="ASSISTANT_ID_PLACEHOLDER"
   call-caller-name="Test Caller"
-  call-caller-number="+447986321440"></telnyx-ai-agent>
+  call-caller-number="+447986321440"
+  region="eu"></telnyx-ai-agent>
 <script async src="https://unpkg.com/@telnyx/ai-agent-widget"></script>
 
 <script>
@@ -465,6 +487,38 @@ footer code { font-size: .95em; }
   setInterval(poll, 1200);
   poll();
 
+  /* ── failure reporting ───────────────────────────────────────────────────
+     A call that is refused before it connects emits NO error event — the widget
+     simply hangs up. So the only way to catch it is to watch whether the call
+     ever reached "active" before it died.                                     */
+  var reachedActive = false;
+
+  function showAlert(title, bodyHtml) {
+    $('alert-title').textContent = title;
+    $('alert-body').innerHTML = bodyHtml;
+    $('alert').classList.add('show');
+  }
+  function hideAlert() { $('alert').classList.remove('show'); }
+
+  function explain(detail) {
+    var d = detail || {};
+    var code = String(d.name || d.code || '');
+    var msg = String(d.message || '');
+
+    if (/MICROPHONE|NotAllowed|Permission/i.test(code + msg)) {
+      return [
+        'Microphone blocked',
+        'Your browser is refusing microphone access for this site. Click the padlock ' +
+        'next to the address bar, set <code>Microphone</code> to Allow, then reload and try again. ' +
+        'Permissions are per-site, so allowing it on another address doesn\'t carry over.'
+      ];
+    }
+    if (/NotFound|Device/i.test(code + msg)) {
+      return ['No microphone found', 'The browser could not find a microphone. Check one is connected and not in use by another app.'];
+    }
+    return ['Call failed', msg ? msg : 'The call could not be started.'];
+  }
+
   function wire() {
     var w = $('agent');
     if (!w || !w.addEventListener) return;
@@ -474,15 +528,40 @@ footer code { font-size: .95em; }
 
     w.addEventListener('conversation.update', function (e) {
       var cs = (e.detail || {}).callState;
-      if (cs === 'active') setPill($('pill-conn'), 'live', 'On a call');
-      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); }
+      if (cs === 'new' || cs === 'requesting') { hideAlert(); reachedActive = false; }
+      if (cs === 'active') {
+        reachedActive = true;
+        hideAlert();
+        setPill($('pill-conn'), 'live', 'On a call');
+      }
+      if (cs === 'hangup' || cs === 'destroy') {
+        setPill($('pill-conn'), '', 'Call ended');
+        setState('idle');
+        // Died without ever connecting: nothing was wrong with the click.
+        if (!reachedActive) {
+          setPill($('pill-conn'), 'warn', 'Call refused');
+          showAlert(
+            'The call was refused before it connected',
+            'The assistant authenticated fine, but Telnyx ended the call immediately. ' +
+            'This is almost always <strong>no credit on the Telnyx account</strong> — ' +
+            'check the balance at <code>portal.telnyx.com</code> → Billing. ' +
+            'It can also mean the assistant has web calls disabled.'
+          );
+        }
+      }
     });
 
     w.addEventListener('agent.connected', function () { setPill($('pill-conn'), '', 'Ready to call'); });
     w.addEventListener('agent.disconnected', function () { setPill($('pill-conn'), '', 'Disconnected'); });
+
     w.addEventListener('agent.error', function (e) {
+      var parts = explain(e.detail);
       setPill($('pill-conn'), 'warn', 'Error');
-      console.error('[widget]', e.detail);
+      showAlert(parts[0], parts[1]);
+      // Serialised: the raw detail stringifies to "[object Object]" and tells
+      // whoever is debugging precisely nothing.
+      try { console.error('[widget]', JSON.stringify(e.detail)); }
+      catch (_) { console.error('[widget]', e.detail); }
     });
   }
 
