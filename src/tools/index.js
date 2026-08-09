@@ -314,18 +314,19 @@ async function bookAppointment(s, body) {
   const blocked = bookingBlocked(s);
   if (blocked) return blocked;
 
-  const missingContact = ['name', 'phone', 'email'].filter((k) => !state.isAnswered(s.contact[k]));
+  const missingContact = state.CONTACT_FIELDS.filter((k) => !state.isAnswered(s.contact[k]));
   if (missingContact.length) {
-    const asks = {
-      name: 'Can I take your full name?',
-      phone: "And the best number to get you on?",
-      email: 'And an email for the confirmation — could you spell it out for me?',
-    };
+    // Count the refusal. Without this, book_appointment asks for the same detail
+    // forever: it is the only thing that checks contact fields, so nothing else
+    // could ever notice the caller had already been asked.
+    const decision = state.noteAsked(s, missingContact[0]);
+    const next = nextQuestion(s);
     return {
       ok: false,
-      reason: 'missing_field',
+      reason: decision === 'stop' ? 'stuck' : 'missing_field',
       missing: missingContact,
-      say: asks[missingContact[0]],
+      stuck: s.stuck || undefined,
+      say: next.say,
     };
   }
 

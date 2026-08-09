@@ -502,3 +502,53 @@ test('the loop breaker cannot open a gate on its own', () => {
   for (let i = 0; i < 12; i++) tools.nextQuestionTool(s);
   assert.equal(state.gateB(s), false, 'giving up on questions must never mean booking anyway');
 });
+
+/* ------------------------------------------------- contact details (loop 4) */
+
+test('a name given early in the call is never asked for again', () => {
+  const s = fresh();
+  tools.recordDetails(s, { name: 'James Whitfield' });
+  assert.equal(s.contact.name, 'James Whitfield');
+
+  // Get as far as a chosen slot, where contact details are collected.
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: '14 Oak Road', systemType: 'gas boiler', callerRelationship: 'owner', lane: 'repair' });
+  tools.recordDetails(s, { fault: 'no heating', makeModel: 'Worcester', symptoms: 'not given' });
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+
+  assert.ok(!state.missingFields(s).includes('name'), 'the name is already known');
+  assert.ok(!/full name/i.test(tools.nextQuestionTool(s).say), 'must not ask for it again');
+});
+
+test('contact details are asked after a time is chosen, not before', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: '14 Oak Road', systemType: 'gas boiler', callerRelationship: 'owner', lane: 'repair' });
+  tools.recordDetails(s, { fault: 'no heating', makeModel: 'Worcester', symptoms: 'not given' });
+
+  // No slot yet — asking for an email before we know we can even come out is
+  // the wrong order, so she should be heading for the diary.
+  assert.ok(!state.missingFields(s).some((f) => ['name', 'phone', 'email'].includes(f)));
+  assert.ok(/day suits|booked in/i.test(tools.nextQuestionTool(s).say));
+
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+  assert.deepEqual(
+    state.missingFields(s).filter((f) => ['name', 'phone', 'email'].includes(f)),
+    ['name', 'phone', 'email'],
+    'and in that order once a slot is on the table'
+  );
+});
+
+test('book_appointment cannot ask for the same detail forever', async () => {
+  const s = fullyQualified(fresh());
+  s.contact.email = null;
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+
+  const reasons = [];
+  for (let i = 0; i < 5; i++) {
+    const r = await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    reasons.push(r.reason);
+  }
+  assert.ok(reasons.includes('stuck'), `should escalate, got: ${JSON.stringify(reasons)}`);
+  assert.equal(s.bookingUid, null, 'and must still never book without an email');
+});

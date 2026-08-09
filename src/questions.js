@@ -40,6 +40,14 @@ const LINES = {
   applianceCount:
     'Is it just the boiler, or is there a fire or a hob as well?',
 
+  // contact, asked only after a time has been chosen
+  name:
+    'Can I take your full name?',
+  phone:
+    'And the best number to get you on?',
+  email:
+    'And an email for the confirmation — could you spell it out for me?',
+
   // new boiler lane — ends in a survey, never a price
   currentSystem:
     "What have you got at the moment — a combi, a system boiler, a back boiler? And roughly how old is it?",

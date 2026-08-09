@@ -30,6 +30,9 @@ const LANE_FIELDS = {
 
 const LANES = Object.keys(LANE_FIELDS);
 
+/** Asked after a slot is chosen, in this order. */
+const CONTACT_FIELDS = ['name', 'phone', 'email'];
+
 /**
  * The loop breaker.
  *
@@ -48,6 +51,9 @@ const HARD_BLOCKERS = new Set([
   'postcode', 'addressLine1', 'fault', 'serviceType', 'currentSystem',
   'systemType',  // we cannot send an engineer to something we can't identify
   'lane',        // if we can't tell what they want, we can't book the right visit
+  // A booking genuinely cannot exist without these: Cal.com requires an email,
+  // and the office needs a name and number to ring about the arrival window.
+  'name', 'phone', 'email',
 ]);
 
 /**
@@ -209,6 +215,20 @@ function missingFields(state) {
   else for (const f of LANE_FIELDS[state.lane] || []) {
     if (!isAnswered(state.diagnostics[f])) missing.push(f);
   }
+
+  // Contact details, but only once times have been offered — the flow takes the
+  // slot first and the details after, and asking someone's email before they
+  // know if we can even come out is the wrong order.
+  //
+  // These were invisible here entirely, which is why next_question answered
+  // "let's get you booked in" to a call with no name, no number and no email:
+  // it sent her back to the diary while book_appointment refused for exactly
+  // those fields. That round trip is the loop the client saw.
+  if (state.offeredSlots && state.offeredSlots.length) {
+    for (const f of CONTACT_FIELDS) {
+      if (!isAnswered(state.contact[f])) missing.push(f);
+    }
+  }
   return missing;
 }
 
@@ -261,6 +281,7 @@ module.exports = {
   DIAGNOSTIC_FIELDS,
   LANE_FIELDS,
   LANES,
+  CONTACT_FIELDS,
   noteAsked,
   MAX_ASKS,
   SOFT_FIELDS,
