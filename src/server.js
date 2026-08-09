@@ -172,11 +172,37 @@ app.post('/tools/confirm-name', tool('confirm_name', tools.confirmName));
 app.post('/tools/reschedule', tool('reschedule_booking', tools.rescheduleBooking));
 app.post('/tools/cancel', tool('cancel_booking', tools.cancelBooking));
 
-/** Cal.com webhooks — keeps our view true when the office edits the diary by hand. */
+/**
+ * Cal.com webhooks — keeps our view true when the office edits the diary by hand.
+ *
+ * Previously this only wrote a log line, so a visit cancelled directly in Cal.com
+ * stayed "Booked" in the sheet forever: the office would be looking at a list of
+ * visits that were not happening. Now the row follows the diary.
+ */
 app.post('/webhooks/calcom', (req, res) => {
   const ev = req.body || {};
-  log.write({ type: 'calcom_webhook', trigger: ev.triggerEvent, uid: ev.payload && ev.payload.uid });
+  const payload = ev.payload || {};
+  const uid = payload.uid;
+  log.write({ type: 'calcom_webhook', trigger: ev.triggerEvent, uid });
+
+  // Acknowledge immediately; Cal.com retries on a slow response and the sheet
+  // write is not something it should ever wait for.
   res.json({ ok: true });
+
+  if (!uid) return;
+  const sheets = require('./sheets');
+  const time = require('./time');
+  if (ev.triggerEvent === 'BOOKING_CANCELLED') {
+    sheets.logStatusChange(uid, 'Cancelled', null, null);
+  } else if (ev.triggerEvent === 'BOOKING_RESCHEDULED') {
+    const start = payload.startTime || payload.start;
+    sheets.logStatusChange(
+      uid,
+      'Rescheduled',
+      start ? time.spokenLabel(start) : null,
+      payload.rescheduledToUid || payload.newUid || null
+    );
+  }
 });
 
 /** Post-call summary from Telnyx Insights. */
@@ -185,8 +211,26 @@ app.post('/webhooks/telnyx-insights', (req, res) => {
   res.json({ ok: true });
 });
 
-/** "How many callers did we turn away as out of area?" — the month-two question. */
-app.get('/report', (_req, res) => res.json(log.summary()));
+/**
+ * "How many callers did we turn away as out of area?" — the month-two question.
+ *
+ * Durable totals come from the Google Sheet, because Railway's disk is ephemeral
+ * and the local JSONL is wiped on every deploy. The in-process view is still
+ * reported alongside, clearly labelled as this-container-only.
+ */
+app.get('/report', async (_req, res) => {
+  const local = log.summary();
+  let durable = null;
+  try {
+    durable = await require('./sheets').summary();
+  } catch (err) {
+    console.error('[report] sheet totals unavailable:', err.message);
+  }
+  res.json({
+    durable: durable || { note: 'Google Sheet not configured — no durable totals' },
+    thisContainerOnly: local,
+  });
+});
 
 /**
  * The most recently active call. The test console can't know its own

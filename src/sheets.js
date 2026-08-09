@@ -273,8 +273,59 @@ function logCall(state, outcome, reason) {
   });
 }
 
+/**
+ * Totals read back from the sheet.
+ *
+ * Railway's disk is ephemeral, so the local JSONL is wiped on every deploy and
+ * /report reads zero in production — which is how a client question about lost
+ * calls became unanswerable. The sheet is the only durable record we have, so
+ * the report comes from there when it is configured.
+ *
+ * Cached briefly: /report is opened by a human occasionally, not polled.
+ */
+let cache = { at: 0, data: null };
+
+async function summary() {
+  if (!isEnabled()) return null;
+  if (cache.data && Date.now() - cache.at < 30000) return cache.data;
+
+  const api_ = await api();
+  const read = async (tab, range) => {
+    const r = await api_.spreadsheets.values.get({ spreadsheetId: spreadsheetId(), range: `${tab}!${range}` });
+    return (r.data.values || []).slice(1); // drop the header row
+  };
+
+  const [bookings, calls] = await Promise.all([
+    read(BOOKINGS, 'A:S'),
+    read(CALL_LOG, 'A:J'),
+  ]);
+
+  const statusOf = (row) => String(row[1] || '').toLowerCase();
+  const outcomeOf = (row) => String(row[1] || '').toLowerCase();
+
+  const data = {
+    source: 'google-sheet',
+    bookings: {
+      total: bookings.length,
+      live: bookings.filter((r) => statusOf(r) === 'booked').length,
+      rescheduled: bookings.filter((r) => statusOf(r) === 'rescheduled').length,
+      cancelled: bookings.filter((r) => statusOf(r) === 'cancelled').length,
+    },
+    lostCalls: {
+      total: calls.length,
+      outOfArea: calls.filter((r) => outcomeOf(r) === 'out_of_area').length,
+      unclearArea: calls.filter((r) => outcomeOf(r) === 'area_unclear').length,
+      notOurTrade: calls.filter((r) => outcomeOf(r) === 'system_not_covered').length,
+      systemUnclear: calls.filter((r) => outcomeOf(r) === 'system_unclear').length,
+      emergencies: calls.filter((r) => outcomeOf(r) === 'emergency').length,
+    },
+  };
+  cache = { at: Date.now(), data };
+  return data;
+}
+
 module.exports = {
-  isEnabled, ensureTabs, record, flush,
+  isEnabled, ensureTabs, record, flush, summary,
   logBooking, logStatusChange, logCall,
   BOOKINGS, CALL_LOG, BOOKING_HEADERS, CALL_HEADERS,
   _queue: queue,
