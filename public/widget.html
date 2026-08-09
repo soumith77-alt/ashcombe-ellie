@@ -492,13 +492,19 @@ footer code { font-size: .95em; }
      simply hangs up. So the only way to catch it is to watch whether the call
      ever reached "active" before it died.                                     */
   var reachedActive = false;
+  // A specific error (microphone, device) always beats the generic "refused"
+  // message. Both fire for a denied mic — the error first, then the hangup —
+  // and without this the useful one gets overwritten a beat later.
+  var haveSpecificReason = false;
 
-  function showAlert(title, bodyHtml) {
+  function showAlert(title, bodyHtml, specific) {
+    if (haveSpecificReason && !specific) return;
+    if (specific) haveSpecificReason = true;
     $('alert-title').textContent = title;
     $('alert-body').innerHTML = bodyHtml;
     $('alert').classList.add('show');
   }
-  function hideAlert() { $('alert').classList.remove('show'); }
+  function hideAlert() { haveSpecificReason = false; $('alert').classList.remove('show'); }
 
   function explain(detail) {
     var d = detail || {};
@@ -557,7 +563,7 @@ footer code { font-size: .95em; }
     w.addEventListener('agent.error', function (e) {
       var parts = explain(e.detail);
       setPill($('pill-conn'), 'warn', 'Error');
-      showAlert(parts[0], parts[1]);
+      showAlert(parts[0], parts[1], true);
       // Serialised: the raw detail stringifies to "[object Object]" and tells
       // whoever is debugging precisely nothing.
       try { console.error('[widget]', JSON.stringify(e.detail)); }
