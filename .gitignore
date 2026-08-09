@@ -3,3 +3,4 @@ node_modules/
 .claude-flow/data/
 *.log
 logs/
+audio/
