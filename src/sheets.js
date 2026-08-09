@@ -160,7 +160,11 @@ async function append(tab, values) {
   await sheets.spreadsheets.values.append({
     spreadsheetId: spreadsheetId(),
     range: `${tab}!A1`,
-    valueInputOption: 'USER_ENTERED',
+    // RAW, not USER_ENTERED: Sheets parses "+447700900555" as a formula and
+    // stores 447700900555, dropping the country prefix. An engineer ringing a
+    // customer back on a mangled number is exactly the kind of quiet data loss
+    // nobody notices until it matters.
+    valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [values] },
   });
