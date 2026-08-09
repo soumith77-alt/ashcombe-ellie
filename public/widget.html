@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ring Ashcombe Heating — Ellie test line</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #0f1115; color: #e7e9ee;
+  }
+  main { max-width: 42rem; padding: 2.5rem 1.5rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  p.sub { margin: 0 0 2rem; color: #9aa3b2; }
+  section { background: #171a21; border: 1px solid #262b36; border-radius: 12px; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: #9aa3b2; margin: 0 0 .6rem; }
+  ul { margin: 0; padding-left: 1.1rem; }
+  li { margin-bottom: .35rem; }
+  code { background: #0f1115; border: 1px solid #262b36; border-radius: 4px; padding: .1rem .35rem; font-size: .87em; }
+  .warn { color: #ffb86b; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ashcombe Heating — test line</h1>
+  <p class="sub">Click the widget to talk to Ellie. Real speech, real diary, real bookings.</p>
+
+  <section>
+    <h2>Try these</h2>
+    <ul>
+      <li>“Hiya, I’ve no hot water at all.” → she should ask for the <strong>postcode first</strong>.</li>
+      <li>Give <code>M20 2RT</code> (in area) or <code>EH1 1YZ</code> (she should politely decline).</li>
+      <li>Ask “what time do you open?” mid-call → she answers, then <strong>returns to the question</strong>.</li>
+      <li>Ask “do you do out-of-hours?” → “no”, then back to diagnostics. No safety script.</li>
+      <li>Say “just book me in for tomorrow” → she agrees, then keeps asking.</li>
+      <li class="warn">Say “I can smell gas” → safety script, and booking is locked for the rest of the call.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Watch what it's doing</h2>
+    <ul>
+      <li>Live state: <code>curl localhost:3000/state/&lt;call-control-id&gt;</code></li>
+      <li>Totals: <a href="/report" style="color:#8ab4ff">/report</a></li>
+      <li>Every tool call: <code>tail -f logs/calls.jsonl</code></li>
+    </ul>
+  </section>
+</main>
+
+<!-- agent-id is public by design; the Cal.com key lives only in the middleware. -->
+<telnyx-ai-agent
+  agent-id="ASSISTANT_ID_PLACEHOLDER"
+  call-caller-name="Test Caller"
+  call-caller-number="+447986321440"></telnyx-ai-agent>
+<script async src="https://unpkg.com/@telnyx/ai-agent-widget"></script>
+</body>
+</html>

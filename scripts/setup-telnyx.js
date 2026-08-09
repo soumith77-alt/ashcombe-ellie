@@ -280,6 +280,14 @@ function assistantPayload(toolIds) {
       user_idle_reply_secs: 12,
       user_idle_timeout_secs: 45,
       time_limit_secs: 900,
+      // Lets you actually talk to Ellie from a browser while there's no phone
+      // number on the account — real voice, real STT, real barge-in.
+      supports_unauthenticated_web_calls: true,
+    },
+    widget_settings: {
+      start_call_text: 'Call Ashcombe Heating',
+      agent_thinking_text: 'One moment…',
+      speak_to_interrupt_text: 'Speak to interrupt',
     },
     enabled_features: ['telephony'],
   };

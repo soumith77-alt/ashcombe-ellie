@@ -99,6 +99,20 @@ function tool(name, handler) {
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+/**
+ * Click-to-talk test page. Browser voice against the live assistant, so there's
+ * something to try while the account has no phone number.
+ * The assistant id is public by design — the Cal.com key never leaves this service.
+ */
+app.get('/widget', (_req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs
+    .readFileSync(path.join(__dirname, '..', 'public', 'widget.html'), 'utf8')
+    .replace('ASSISTANT_ID_PLACEHOLDER', process.env.TELNYX_ASSISTANT_ID || '');
+  res.type('html').send(html);
+});
+
 app.post('/tools/service-area', tool('check_service_area', tools.checkServiceArea));
 app.post('/tools/next-question', tool('next_question', tools.nextQuestionTool));
 app.post('/tools/record', tool('record_details', tools.recordDetails));
