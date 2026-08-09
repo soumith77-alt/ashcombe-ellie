@@ -413,20 +413,62 @@ footer a:hover { color: var(--ember); }
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ── transcript ─────────────────────────────────────────── */
+  /* ── transcript ─────────────────────────────────────────────────────────
+     The widget streams `transcript.item` as INCREMENTAL DELTAS — "is the",
+     "property?", "If", "you give" — each with its own id. Rendering one bubble
+     per event shreds her speech into confetti, so deltas are accumulated into a
+     single open turn and only closed when the speaker changes or she stops.
+
+     Handles both delta and cumulative styles: if a chunk already contains what
+     we have, it replaces rather than appends, so a final full-text event can't
+     double the sentence up.                                                    */
   var seen = new Set();
   var pending = null;
+  var open = null; // { role, text, bubble, meta, latency }
 
   function clearThinking() {
     if (pending) { pending.remove(); pending = null; }
   }
 
-  function addTurn(role, text, latency) {
+  function joinChunk(existing, chunk) {
+    if (!existing) return chunk;
+    if (chunk.indexOf(existing) === 0) return chunk;            // cumulative
+    if (existing.indexOf(chunk) !== -1) return existing;        // repeat
+    var needsSpace = !/\s$/.test(existing) && !/^\s/.test(chunk) &&
+                     !/^[,.?!;:'’”)\]]/.test(chunk);
+    return existing + (needsSpace ? ' ' : '') + chunk;
+  }
+
+  function stamp(isEllie, latency) {
+    var t = new Date();
+    var s = '<span>' + (isEllie ? 'Ellie' : 'You') + ' · ' +
+      String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>';
+    if (latency) s += '<span class="lat">' + Math.round(latency) + ' ms</span>';
+    return s;
+  }
+
+  function closeTurn() { open = null; }
+
+  function appendChunk(role, text, latency) {
     if (!text) return;
     var empty = $('empty'); if (empty) empty.remove();
     clearThinking();
 
     var isEllie = role !== 'user';
+
+    // Same speaker still going — grow the bubble that's already on screen.
+    if (open && open.isEllie === isEllie) {
+      open.text = joinChunk(open.text, text);
+      open.bubble.textContent = open.text;
+      if (latency && !open.latency) {
+        open.latency = latency;
+        open.meta.innerHTML = stamp(isEllie, latency);
+      }
+      var b0 = $('transcript');
+      b0.scrollTop = b0.scrollHeight;
+      return;
+    }
+
     var row = document.createElement('div');
     row.className = 'turn ' + (isEllie ? 'ellie' : 'caller');
 
@@ -442,21 +484,15 @@ footer a:hover { color: var(--ember); }
 
     var meta = document.createElement('div');
     meta.className = 'meta';
-    var t = new Date();
-    meta.innerHTML = '<span>' + (isEllie ? 'Ellie' : 'You') + ' · ' +
-      String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>';
-    if (latency) {
-      var l = document.createElement('span');
-      l.className = 'lat';
-      l.textContent = Math.round(latency) + ' ms';
-      meta.appendChild(l);
-    }
+    meta.innerHTML = stamp(isEllie, latency);
 
     col.appendChild(bub); col.appendChild(meta);
     row.appendChild(who); row.appendChild(col);
     var box = $('transcript');
     box.appendChild(row);
     box.scrollTop = box.scrollHeight;
+
+    open = { isEllie: isEllie, text: text, bubble: bub, meta: meta, latency: latency || null };
   }
 
   function showThinking() {
@@ -487,6 +523,7 @@ footer a:hover { color: var(--ember); }
     $('state-sub').textContent = STATES[key][1];
     $('eq').className = 'eq' + (key === 'speaking' ? ' on' : '');
     if (key === 'thinking') showThinking(); else clearThinking();
+    if (key !== 'speaking') closeTurn();
   }
 
   function setPill(el, cls, text) {
@@ -580,7 +617,7 @@ footer a:hover { color: var(--ember); }
       var d = e.detail || {};
       if (d.id && seen.has(d.id)) return;
       if (d.id) seen.add(d.id);
-      addTurn(d.role, d.content, d.userPerceivedLatencyMs || d.greetingLatencyMs);
+      appendChunk(d.role, d.content, d.userPerceivedLatencyMs || d.greetingLatencyMs);
       poll();
     });
 
@@ -591,7 +628,7 @@ footer a:hover { color: var(--ember); }
     w.addEventListener('conversation.update', function (e) {
       var cs = (e.detail || {}).callState;
       if (cs === 'active') setPill($('pill-conn'), 'live', 'On a call');
-      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); }
+      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); closeTurn(); }
     });
 
     w.addEventListener('agent.connected', function () { setPill($('pill-conn'), '', 'Ready to call'); });
