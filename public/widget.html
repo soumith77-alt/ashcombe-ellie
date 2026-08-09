@@ -1,60 +1,614 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ring Ashcombe Heating — Ellie test line</title>
+<title>Ellie · Ashcombe Heating — live call console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet" />
 <style>
-  :root { color-scheme: light dark; }
-  body {
-    margin: 0; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    background: #0f1115; color: #e7e9ee;
-  }
-  main { max-width: 42rem; padding: 2.5rem 1.5rem; }
-  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
-  p.sub { margin: 0 0 2rem; color: #9aa3b2; }
-  section { background: #171a21; border: 1px solid #262b36; border-radius: 12px; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
-  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: #9aa3b2; margin: 0 0 .6rem; }
-  ul { margin: 0; padding-left: 1.1rem; }
-  li { margin-bottom: .35rem; }
-  code { background: #0f1115; border: 1px solid #262b36; border-radius: 4px; padding: .1rem .35rem; font-size: .87em; }
-  .warn { color: #ffb86b; }
+/* ─────────────────────────────────────────────── tokens
+   Warm amber against cool slate. The warmth is deliberate — this is a heating
+   company, and it separates Ellie's voice from the caller's at a glance.      */
+:root {
+  --bg:        #0a0c10;
+  --bg-glow:   #10141c;
+  --surface:   #12161f;
+  --surface-2: #171c27;
+  --line:      #232a37;
+  --line-soft: #1b212c;
+
+  --text:      #e8ecf4;
+  --text-dim:  #9aa5b8;   /* 5.9:1 on --surface */
+  --text-faint:#6b7688;   /* labels only, never body */
+
+  --ember:     #f0a04b;
+  --ember-lo:  rgba(240,160,75,.12);
+  --cool:      #7aa2f7;
+  --cool-lo:   rgba(122,162,247,.12);
+  --go:        #4ade80;
+  --go-lo:     rgba(74,222,128,.12);
+  --stop:      #f87171;
+  --stop-lo:   rgba(248,113,113,.12);
+
+  --r-sm: 8px; --r: 14px; --r-lg: 20px;
+  --t: 200ms cubic-bezier(.4,0,.2,1);
+
+  /* z-scale: 10 content, 20 sticky, 30 overlay, 50 widget */
+  --z-sticky: 20;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(240,160,75,.07), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, rgba(122,162,247,.06), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1,h2,h3 { margin: 0; line-height: 1.25; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 22px 120px; }
+
+/* ─────────────────────────────────────────────── header */
+header {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding-bottom: 22px; margin-bottom: 24px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.mark {
+  width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #2a2016, #1a1d27);
+  border: 1px solid #3a2c1c;
+  color: var(--ember);
+}
+.mark svg { width: 24px; height: 24px; }
+.title h1 { font-size: 1.22rem; font-weight: 600; letter-spacing: -.02em; }
+.title p  { margin: 2px 0 0; color: var(--text-dim); font-size: .87rem; }
+.title em {
+  font-family: Newsreader, Georgia, serif; font-style: italic;
+  color: var(--ember); font-size: 1.03em;
+}
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-size: .78rem; font-weight: 500; color: var(--text-dim);
+  white-space: nowrap;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); flex: none; }
+.pill.live { color: var(--go); border-color: rgba(74,222,128,.32); background: var(--go-lo); }
+.pill.live .dot { background: var(--go); animation: breathe 2s ease-in-out infinite; }
+.pill.warn { color: var(--stop); border-color: rgba(248,113,113,.32); background: var(--stop-lo); }
+.pill.warn .dot { background: var(--stop); }
+@keyframes breathe { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ─────────────────────────────────────────────── layout */
+.grid { display: grid; gap: 20px; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr); align-items: start; }
+@media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  background: linear-gradient(180deg, var(--surface), #10141c);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.card + .card { margin-top: 20px; }
+.card-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 15px 18px; border-bottom: 1px solid var(--line-soft);
+}
+.card-head h2 {
+  font-size: .74rem; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.card-head .spacer { margin-left: auto; }
+.card-body { padding: 18px; }
+
+/* ─────────────────────────────────────────────── agent state */
+.state-strip {
+  display: flex; align-items: center; gap: 15px;
+  padding: 15px 18px; border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-2);
+}
+.orb { position: relative; width: 42px; height: 42px; flex: none; display: grid; place-items: center; }
+.orb i {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: var(--text-faint); opacity: .18;
+}
+.orb b {
+  position: relative; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--text-faint); transition: background var(--t);
+}
+.orb.listening i { background: var(--cool); animation: ring 2s ease-out infinite; }
+.orb.listening b { background: var(--cool); }
+.orb.thinking  i { background: var(--ember); animation: ring 1.1s ease-out infinite; }
+.orb.thinking  b { background: var(--ember); }
+.orb.speaking  i { background: var(--go); opacity: .22; }
+.orb.speaking  b { background: var(--go); }
+@keyframes ring {
+  0%   { transform: scale(.55); opacity: .45; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+.state-label { font-weight: 600; font-size: .95rem; }
+.state-sub { color: var(--text-dim); font-size: .82rem; }
+
+/* equaliser — only while speaking. Hidden otherwise: five green dots sitting
+   there while she's silent reads as a status light that means nothing.        */
+.eq {
+  display: flex; align-items: flex-end; gap: 3px; height: 22px; margin-left: auto;
+  opacity: 0; visibility: hidden; transition: opacity var(--t);
+}
+.eq.on { opacity: 1; visibility: visible; }
+.eq span {
+  width: 3px; border-radius: 2px; background: var(--go); opacity: .8;
+  height: 5px; transform-origin: bottom;
+}
+.eq.on span { animation: bounce .9s ease-in-out infinite; }
+.eq span:nth-child(2){ animation-delay:.12s } .eq span:nth-child(3){ animation-delay:.24s }
+.eq span:nth-child(4){ animation-delay:.36s } .eq span:nth-child(5){ animation-delay:.48s }
+@keyframes bounce { 0%,100%{ transform: scaleY(.35) } 50%{ transform: scaleY(3.6) } }
+
+/* ─────────────────────────────────────────────── transcript */
+#transcript {
+  height: min(56vh, 500px); overflow-y: auto;
+  padding: 20px 18px; display: flex; flex-direction: column; gap: 14px;
+  scroll-behavior: smooth;
+}
+#transcript::-webkit-scrollbar { width: 9px; }
+#transcript::-webkit-scrollbar-thumb { background: #262d3b; border-radius: 9px; border: 2px solid var(--surface); }
+
+.turn { display: flex; gap: 11px; max-width: 86%; animation: rise 260ms cubic-bezier(.4,0,.2,1); }
+.turn.caller { margin-left: auto; flex-direction: row-reverse; }
+@keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
+.who {
+  width: 30px; height: 30px; flex: none; border-radius: 9px;
+  display: grid; place-items: center; font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+}
+.turn.ellie  .who { background: var(--ember-lo); color: var(--ember); border: 1px solid rgba(240,160,75,.28); }
+.turn.caller .who { background: var(--cool-lo);  color: var(--cool);  border: 1px solid rgba(122,162,247,.28); }
+
+.bubble { padding: 11px 15px; border-radius: var(--r); font-size: .93rem; }
+.turn.ellie  .bubble { background: var(--surface-2); border: 1px solid var(--line); border-top-left-radius: 5px; }
+.turn.caller .bubble { background: rgba(122,162,247,.15); border: 1px solid rgba(122,162,247,.3); border-top-right-radius: 5px; }
+.meta { margin-top: 6px; font-size: .7rem; color: var(--text-faint); display: flex; gap: 9px; }
+.turn.caller .meta { justify-content: flex-end; }
+.lat { color: var(--text-dim); }
+
+.empty { margin: auto; text-align: center; color: var(--text-faint); max-width: 30ch; }
+.empty svg { width: 34px; height: 34px; opacity: .4; margin-bottom: 10px; }
+.empty p { margin: 0; font-size: .87rem; }
+
+/* thinking dots */
+.thinking-row { display: flex; gap: 11px; }
+.dots { display: flex; gap: 4px; align-items: center; padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); border-top-left-radius: 5px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: blink 1.3s infinite; }
+.dots i:nth-child(2){ animation-delay:.18s } .dots i:nth-child(3){ animation-delay:.36s }
+@keyframes blink { 0%,60%,100%{ opacity:.25 } 30%{ opacity:1 } }
+
+/* ─────────────────────────────────────────────── gates */
+.gate { padding: 14px 16px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--line); }
+.gate + .gate { margin-top: 11px; }
+.gate.open { border-color: rgba(74,222,128,.34); background: linear-gradient(180deg, var(--go-lo), var(--surface-2)); }
+.gate-top { display: flex; align-items: center; gap: 10px; }
+.gate-icon { width: 26px; height: 26px; flex: none; border-radius: 8px; display: grid; place-items: center; background: #1e2430; color: var(--text-faint); transition: all var(--t); }
+.gate.open .gate-icon { background: var(--go-lo); color: var(--go); }
+.gate-icon svg { width: 14px; height: 14px; }
+.gate-name { font-weight: 600; font-size: .9rem; }
+.gate-tag { margin-left: auto; font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+.gate.open .gate-tag { color: var(--go); }
+
+.checks { list-style: none; margin: 11px 0 0; padding: 0; display: grid; gap: 7px; }
+.checks li { display: flex; align-items: center; gap: 9px; font-size: .84rem; color: var(--text-faint); transition: color var(--t); }
+.checks li .box {
+  width: 15px; height: 15px; flex: none; border-radius: 5px;
+  border: 1.5px solid #333c4c; display: grid; place-items: center;
+  transition: all var(--t);
+}
+.checks li .box svg { width: 9px; height: 9px; opacity: 0; transition: opacity var(--t); }
+.checks li.done { color: var(--text); }
+.checks li.done .box { background: var(--go); border-color: var(--go); color: #06240f; }
+.checks li.done .box svg { opacity: 1; }
+.checks li .val { margin-left: auto; color: var(--text-dim); font-size: .77rem; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* progress rail */
+.rail { height: 3px; border-radius: 3px; background: #212836; overflow: hidden; margin-top: 12px; }
+.rail i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ember), var(--go)); transition: width 420ms cubic-bezier(.4,0,.2,1); }
+
+/* lock banner */
+.lock {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px; padding: 11px 14px; border-radius: var(--r);
+  font-size: .84rem; background: var(--ember-lo); border: 1px solid rgba(240,160,75,.28); color: #f6c48b;
+}
+.lock.open { background: var(--go-lo); border-color: rgba(74,222,128,.3); color: #9df0bb; }
+.lock.stop { background: var(--stop-lo); border-color: rgba(248,113,113,.34); color: #fca5a5; }
+.lock svg { width: 15px; height: 15px; flex: none; }
+
+/* slots */
+.slots { display: flex; flex-wrap: wrap; gap: 8px; }
+.slot {
+  padding: 8px 13px; border-radius: 999px; font-size: .83rem; font-weight: 500;
+  background: var(--cool-lo); border: 1px solid rgba(122,162,247,.3); color: #b9cdfb;
+}
+.muted { color: var(--text-faint); font-size: .85rem; margin: 0; }
+
+/* try-list */
+.try { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+@media (min-width: 780px) { .try { grid-template-columns: 1fr 1fr; gap: 12px 26px; } }
+.card.wide { margin-top: 20px; }
+.try li { display: flex; gap: 10px; font-size: .87rem; color: var(--text-dim); }
+.try .n {
+  width: 21px; height: 21px; flex: none; border-radius: 6px; margin-top: 1px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  display: grid; place-items: center; font-size: .68rem; font-weight: 700; color: var(--text-faint);
+}
+.try code { background: #0d1017; border: 1px solid var(--line); border-radius: 5px; padding: .06em .38em; font-size: .88em; color: var(--ember); }
+.try li.danger .n { background: var(--stop-lo); border-color: rgba(248,113,113,.3); color: var(--stop); }
+
+footer { margin-top: 26px; color: var(--text-faint); font-size: .8rem; display: flex; gap: 18px; flex-wrap: wrap; }
+footer a { color: var(--text-dim); }
+footer a:hover { color: var(--ember); }
+
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  #transcript { scroll-behavior: auto; }
+}
 </style>
 </head>
 <body>
-<main>
-  <h1>Ashcombe Heating — test line</h1>
-  <p class="sub">Click the widget to talk to Ellie. Real speech, real diary, real bookings.</p>
+<div class="wrap">
 
-  <section>
-    <h2>Try these</h2>
-    <ul>
-      <li>“Hiya, I’ve no hot water at all.” → she should ask for the <strong>postcode first</strong>.</li>
-      <li>Give <code>M20 2RT</code> (in area) or <code>EH1 1YZ</code> (she should politely decline).</li>
-      <li>Ask “what time do you open?” mid-call → she answers, then <strong>returns to the question</strong>.</li>
-      <li>Ask “do you do out-of-hours?” → “no”, then back to diagnostics. No safety script.</li>
-      <li>Say “just book me in for tomorrow” → she agrees, then keeps asking.</li>
-      <li class="warn">Say “I can smell gas” → safety script, and booking is locked for the rest of the call.</li>
-    </ul>
-  </section>
+  <header>
+    <div class="mark" aria-hidden="true">
+      <!-- flame -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22c4 0 7-2.6 7-6.4 0-3.9-3.2-6.2-4.6-9.6-.5 2-1.6 3-2.9 4-1.6-1.7-1.8-3.4-1.6-5C7 6.6 5 9.4 5 13.2 5 18 8 22 12 22Z"/>
+      </svg>
+    </div>
+    <div class="title">
+      <h1>Ashcombe Heating — <em>Ellie</em></h1>
+      <p>Live call console · Gas Safe registered · Mon–Fri 08:00–17:00</p>
+    </div>
+    <div class="head-right">
+      <span class="pill" id="pill-conn"><span class="dot"></span><span>Connecting…</span></span>
+      <span class="pill" id="pill-book"><span class="dot"></span><span>No booking</span></span>
+    </div>
+  </header>
 
-  <section>
-    <h2>Watch what it's doing</h2>
-    <ul>
-      <li>Live state: <code>curl localhost:3000/state/&lt;call-control-id&gt;</code></li>
-      <li>Totals: <a href="/report" style="color:#8ab4ff">/report</a></li>
-      <li>Every tool call: <code>tail -f logs/calls.jsonl</code></li>
-    </ul>
-  </section>
-</main>
+  <div class="grid">
 
-<!-- agent-id is public by design; the Cal.com key lives only in the middleware. -->
+    <!-- ── left: the call ─────────────────────────────────────── -->
+    <div>
+      <div class="card">
+        <div class="state-strip">
+          <div class="orb" id="orb"><i></i><b></b></div>
+          <div>
+            <div class="state-label" id="state-label">Waiting for a call</div>
+            <div class="state-sub" id="state-sub">Press the call button, bottom right</div>
+          </div>
+          <div class="eq" id="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+
+        <div id="transcript" role="log" aria-live="polite" aria-label="Live call transcript">
+          <div class="empty" id="empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>
+            </svg>
+            <p>The transcript appears here as you speak.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Times offered</h2></div>
+        <div class="card-body">
+          <div class="slots" id="slots"></div>
+          <p class="muted" id="slots-empty">Nothing offered yet. She can’t reach the diary until both gates open.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── right: what the server thinks ──────────────────────── -->
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Booking gates</h2>
+          <span class="spacer"></span>
+          <span class="pill" id="pill-gate" style="padding:4px 10px;font-size:.7rem"><span class="dot"></span><span>Locked</span></span>
+        </div>
+        <div class="card-body">
+
+          <div class="gate" id="gate-a">
+            <div class="gate-top">
+              <span class="gate-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              </span>
+              <span class="gate-name">Gate A · Location</span>
+              <span class="gate-tag" id="tag-a">Shut</span>
+            </div>
+            <ul class="checks">
+              <li id="c-postcode"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Postcode<span class="val"></span></li>
+              <li id="c-area"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Inside the patch<span class="val"></span></li>
+              <li id="c-address"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Full address<span class="val"></span></li>
+            </ul>
+            <div class="rail"><i id="rail-a"></i></div>
+          </div>
+
+          <div class="gate" id="gate-b">
+            <div class="gate-top">
+              <span class="gate-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+              </span>
+              <span class="gate-name">Gate B · Diagnostics</span>
+              <span class="gate-tag" id="tag-b">Shut</span>
+            </div>
+            <ul class="checks">
+              <li id="c-issue"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Job type<span class="val"></span></li>
+              <li id="c-fault"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Fault<span class="val"></span></li>
+              <li id="c-make"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Make &amp; model<span class="val"></span></li>
+              <li id="c-symptoms"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Other symptoms<span class="val"></span></li>
+            </ul>
+            <div class="rail"><i id="rail-b"></i></div>
+          </div>
+
+          <div class="lock" id="lockbar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span id="locktext">Booking locked until both gates open</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card wide">
+
+    <div class="card-head">
+      <h2>Try these</h2>
+    </div>
+    <div class="card-body">
+      <ul class="try">
+        <li><span class="n">1</span><span>“Hiya, I’ve no hot water at all.” — she should ask for the <strong>postcode first</strong>, before anything about the boiler.</span></li>
+        <li><span class="n">2</span><span>Give <code>M20 2RT</code> (in area) or <code>EH1 1YZ</code> — Edinburgh, she should decline politely and stop taking details.</span></li>
+        <li><span class="n">3</span><span>Mid-call, ask “what time do you open?” — she answers, then <strong>returns to the same question</strong>. No booking offer.</span></li>
+        <li><span class="n">4</span><span>“Do you do out-of-hours?” — an accurate no, then straight back to diagnostics.</span></li>
+        <li><span class="n">5</span><span>“Just book me in for tomorrow.” — she agrees warmly, then keeps asking. Watch the gates below stay shut.</span></li>
+        <li class="danger"><span class="n">6</span><span>“I can smell gas.” — safety script, and booking locks for the rest of the call.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    <span>Assistant <code style="color:var(--text-dim)">ASSISTANT_ID_PLACEHOLDER</code></span>
+    <a href="/report">Totals</a>
+    <a href="/state/latest">Raw state</a>
+  </footer>
+</div>
+
 <telnyx-ai-agent
+  id="agent"
   agent-id="ASSISTANT_ID_PLACEHOLDER"
   call-caller-name="Test Caller"
-  call-caller-number="+447986321440"></telnyx-ai-agent>
+  call-caller-number="+447986321440"
+  show-user-perceived-latency
+  show-greeting-latency></telnyx-ai-agent>
 <script async src="https://unpkg.com/@telnyx/ai-agent-widget"></script>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ── transcript ─────────────────────────────────────────── */
+  var seen = new Set();
+  var pending = null;
+
+  function clearThinking() {
+    if (pending) { pending.remove(); pending = null; }
+  }
+
+  function addTurn(role, text, latency) {
+    if (!text) return;
+    var empty = $('empty'); if (empty) empty.remove();
+    clearThinking();
+
+    var isEllie = role !== 'user';
+    var row = document.createElement('div');
+    row.className = 'turn ' + (isEllie ? 'ellie' : 'caller');
+
+    var who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = isEllie ? 'EL' : 'YOU';
+    who.setAttribute('aria-hidden', 'true');
+
+    var col = document.createElement('div');
+    var bub = document.createElement('div');
+    bub.className = 'bubble';
+    bub.textContent = text;
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    var t = new Date();
+    meta.innerHTML = '<span>' + (isEllie ? 'Ellie' : 'You') + ' · ' +
+      String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>';
+    if (latency) {
+      var l = document.createElement('span');
+      l.className = 'lat';
+      l.textContent = Math.round(latency) + ' ms';
+      meta.appendChild(l);
+    }
+
+    col.appendChild(bub); col.appendChild(meta);
+    row.appendChild(who); row.appendChild(col);
+    var box = $('transcript');
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function showThinking() {
+    if (pending) return;
+    var empty = $('empty'); if (empty) empty.remove();
+    var row = document.createElement('div');
+    row.className = 'turn ellie thinking-row';
+    row.innerHTML = '<span class="who" aria-hidden="true">EL</span>' +
+                    '<div class="dots"><i></i><i></i><i></i></div>';
+    pending = row;
+    var box = $('transcript');
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ── agent state ────────────────────────────────────────── */
+  var STATES = {
+    listening: ['Listening', 'Go ahead — she can hear you'],
+    thinking:  ['Thinking', 'Checking the diary or working it out'],
+    speaking:  ['Speaking', 'Ellie is talking'],
+    idle:      ['Waiting for a call', 'Press the call button, bottom right']
+  };
+
+  function setState(s) {
+    var key = STATES[s] ? s : 'idle';
+    $('orb').className = 'orb ' + (key === 'idle' ? '' : key);
+    $('state-label').textContent = STATES[key][0];
+    $('state-sub').textContent = STATES[key][1];
+    $('eq').className = 'eq' + (key === 'speaking' ? ' on' : '');
+    if (key === 'thinking') showThinking(); else clearThinking();
+  }
+
+  function setPill(el, cls, text) {
+    el.className = 'pill' + (cls ? ' ' + cls : '');
+    el.lastElementChild.textContent = text;
+  }
+
+  /* ── gate panel, polled from the middleware ─────────────── */
+  var GATE_A = [['c-postcode', 'postcode'], ['c-area', 'area'], ['c-address', 'address']];
+  var GATE_B = [['c-issue', 'issueType'], ['c-fault', 'fault'], ['c-make', 'makeModel'], ['c-symptoms', 'symptoms']];
+
+  function tick(id, on, value) {
+    var li = $(id); if (!li) return;
+    li.classList.toggle('done', !!on);
+    li.querySelector('.val').textContent = on && value ? value : '';
+  }
+
+  function short(v) {
+    if (!v) return '';
+    v = String(v);
+    return v.length > 16 ? v.slice(0, 15) + '…' : v;
+  }
+
+  function render(s) {
+    if (!s || !s.ok) return;
+    var loc = s.location || {}, d = s.diagnostics || {};
+
+    tick('c-postcode', loc.postcode, short(loc.postcode));
+    tick('c-area', loc.inArea === true, loc.inArea === true ? 'yes' : '');
+    tick('c-address', loc.address, short(loc.address));
+    tick('c-issue', d.issueType, short(d.issueType));
+    tick('c-fault', d.fault, short(d.fault));
+    tick('c-make', d.makeModel, short(d.makeModel));
+    tick('c-symptoms', d.symptoms, short(d.symptoms));
+
+    var aDone = GATE_A.filter(function (p) { return $(p[0]).classList.contains('done'); }).length;
+    var bDone = GATE_B.filter(function (p) { return $(p[0]).classList.contains('done'); }).length;
+    $('rail-a').style.width = (aDone / GATE_A.length * 100) + '%';
+    $('rail-b').style.width = (bDone / GATE_B.length * 100) + '%';
+
+    var A = !!(s.gate && s.gate.A), B = !!(s.gate && s.gate.B);
+    $('gate-a').classList.toggle('open', A);
+    $('gate-b').classList.toggle('open', B);
+    $('tag-a').textContent = A ? 'Open' : 'Shut';
+    $('tag-b').textContent = B ? 'Open' : 'Shut';
+
+    var bar = $('lockbar'), txt = $('locktext');
+    if (s.emergency) {
+      bar.className = 'lock stop';
+      txt.textContent = 'Safety emergency — booking refused for the rest of this call';
+      setPill($('pill-gate'), 'warn', 'Emergency');
+    } else if (A && B) {
+      bar.className = 'lock open';
+      txt.textContent = 'Both gates open — she may now look at the diary';
+      setPill($('pill-gate'), 'live', 'Unlocked');
+    } else {
+      bar.className = 'lock';
+      txt.textContent = 'Booking locked until both gates open';
+      setPill($('pill-gate'), '', 'Locked');
+    }
+
+    var wrap = $('slots'), slots = s.offeredSlots || [];
+    wrap.innerHTML = '';
+    slots.forEach(function (x) {
+      var el = document.createElement('span');
+      el.className = 'slot';
+      el.textContent = x.label;
+      wrap.appendChild(el);
+    });
+    $('slots-empty').style.display = slots.length ? 'none' : '';
+
+    if (s.bookingUid) setPill($('pill-book'), 'live', 'Booked');
+    else setPill($('pill-book'), '', 'No booking');
+  }
+
+  function poll() {
+    fetch('/state/latest', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () {});
+  }
+  setInterval(poll, 1200);
+  poll();
+
+  /* ── widget wiring ──────────────────────────────────────── */
+  function wire() {
+    var w = $('agent');
+    if (!w || !w.addEventListener) return;
+
+    w.addEventListener('transcript.item', function (e) {
+      var d = e.detail || {};
+      if (d.id && seen.has(d.id)) return;
+      if (d.id) seen.add(d.id);
+      addTurn(d.role, d.content, d.userPerceivedLatencyMs || d.greetingLatencyMs);
+      poll();
+    });
+
+    w.addEventListener('conversation.agent.state', function (e) {
+      setState((e.detail || {}).state);
+    });
+
+    w.addEventListener('conversation.update', function (e) {
+      var cs = (e.detail || {}).callState;
+      if (cs === 'active') setPill($('pill-conn'), 'live', 'On a call');
+      if (cs === 'destroy') { setPill($('pill-conn'), '', 'Call ended'); setState('idle'); }
+    });
+
+    w.addEventListener('agent.connected', function () { setPill($('pill-conn'), '', 'Ready to call'); });
+    w.addEventListener('agent.disconnected', function () { setPill($('pill-conn'), '', 'Disconnected'); });
+    w.addEventListener('agent.error', function (e) {
+      setPill($('pill-conn'), 'warn', 'Error');
+      console.error('[widget]', e.detail);
+    });
+  }
+
+  // The custom element upgrades asynchronously once the CDN bundle lands.
+  if (window.customElements) {
+    customElements.whenDefined('telnyx-ai-agent').then(wire);
+  }
+  document.addEventListener('DOMContentLoaded', wire);
+  wire();
+})();
+</script>
 </body>
 </html>

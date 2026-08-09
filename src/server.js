@@ -107,9 +107,11 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 app.get('/widget', (_req, res) => {
   const fs = require('fs');
   const path = require('path');
+  // replaceAll, not replace — the id appears in both the widget element and the
+  // footer, and a half-substituted page renders but never connects.
   const html = fs
     .readFileSync(path.join(__dirname, '..', 'public', 'widget.html'), 'utf8')
-    .replace('ASSISTANT_ID_PLACEHOLDER', process.env.TELNYX_ASSISTANT_ID || '');
+    .replaceAll('ASSISTANT_ID_PLACEHOLDER', process.env.TELNYX_ASSISTANT_ID || '');
   res.type('html').send(html);
 });
 
@@ -139,6 +141,17 @@ app.post('/webhooks/telnyx-insights', (req, res) => {
 
 /** "How many callers did we turn away as out of area?" — the month-two question. */
 app.get('/report', (_req, res) => res.json(log.summary()));
+
+/**
+ * The most recently active call. The test console can't know its own
+ * call_control_id, so this is how it follows along. Single-caller assumption —
+ * fine for a test page, which is the only thing that uses it.
+ */
+app.get('/state/latest', (_req, res) => {
+  const all = state.all().sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!all.length) return res.json({ ok: false, idle: true });
+  res.json({ ok: true, ...state.withGates(all[0]) });
+});
 
 /** Inspect a call's state — used by the scenario tests to assert on real state. */
 app.get('/state/:id', (req, res) => {
