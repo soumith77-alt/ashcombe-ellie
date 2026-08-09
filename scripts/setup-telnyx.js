@@ -135,7 +135,7 @@ const TOOLS = [
   {
     name: 'check_availability',
     description:
-      'Look at the engineers\' diary and get real appointment times. Say "Let me have a look at the diary" before calling this. Only offer times this returns — never invent one. Refuses until the address and postcode are confirmed, the system is one we cover, and this lane's own questions are answered.',
+      "Look at the engineers' diary and get real appointment times. Say \"Let me have a look at the diary\" before calling this. Only offer times this returns — never invent one. Refuses until the address and postcode are confirmed, the system is one we cover, and this lane's own questions are answered.",
     url: `${BASE}/tools/availability`,
     timeout_ms: 9000,
     body: {

@@ -153,7 +153,7 @@ app.get('/widget', (_req, res) => {
 });
 
 app.post('/tools/service-area', tool('check_service_area', tools.checkServiceArea));
-app.post('/tools/system-type', tool('check_system_type', tools.checkSystemType));
+app.post('/tools/system-type', tool('system_type', tools.checkSystemType));
 app.post('/tools/next-question', tool('next_question', tools.nextQuestionTool));
 app.post('/tools/record', tool('record_details', tools.recordDetails));
 app.post('/tools/availability', tool('check_availability', tools.checkAvailability));

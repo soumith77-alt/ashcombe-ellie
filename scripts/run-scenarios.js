@@ -330,6 +330,116 @@ const SCENARIOS = {
     }
   },
 
+/* ---------------------------------------------------------- the new lanes */
+
+  /** A service caller must never be asked what fault their boiler has. */
+  async serviceLane() {
+    await reset();
+    const { text, transcript } = await run(
+      [
+        "Hiya, I need to book my annual boiler service.",
+        "It's M20 2RT.",
+        '14 Oak Road.',
+        "It's a Worcester gas combi.",
+        "It's my own house.",
+        'Just a service. Only the boiler, nothing else.',
+        'It was about a year ago, you did it.',
+      ],
+      { name: 'serviceLane', quiet: true }
+    );
+
+    check('serviceLane', 'never asks what the fault is',
+      !/what.*(it|boiler).*(doing|wrong)|what'?s the fault|radiators cold|error code|pilot light/i.test(text), text.slice(0, 200));
+    check('serviceLane', 'asks service or certificate',
+      /service.*certificate|certificate.*service/i.test(text), text.slice(0, 200));
+
+    const st = await stateOf();
+    if (st) {
+      check('serviceLane', 'lane recorded as service', st.lane === 'service', st.lane);
+      check('serviceLane', 'gate B opens with no fault answers', st.gate.B === true, JSON.stringify(st.diagnostics));
+      check('serviceLane', 'no fault was invented', !st.diagnostics.fault, st.diagnostics.fault);
+    }
+  },
+
+  /** A new boiler ends in a survey, and never in a price. */
+  async newBoilerLane() {
+    await reset();
+    const { text } = await run(
+      [
+        "I'm after a price for a new boiler.",
+        "M20 2RT.",
+        '14 Oak Road.',
+        "It's a gas combi at the moment.",
+        'I own it.',
+        "It still works, it's just old. A back boiler, about 20 years old.",
+        'Three bedrooms and one bathroom.',
+        'So how much am I looking at?',
+      ],
+      { name: 'newBoilerLane', quiet: true }
+    );
+
+    check('newBoilerLane', 'never quotes a price',
+      !/£|\bpound|\bcost you\b|roughly \d{3,}|around \d{3,}/i.test(text), text.slice(-260));
+    check('newBoilerLane', 'explains the surveyor prices it',
+      /surveyor|survey|fixed price|come out and/i.test(text), text.slice(-260));
+    check('newBoilerLane', 'no charge / no obligation is offered',
+      /no charge|no obligation|free/i.test(text), text.slice(-260));
+
+    const st = await stateOf();
+    if (st) check('newBoilerLane', 'lane recorded as newBoiler', st.lane === 'newBoiler', st.lane);
+  },
+
+  /** Something we don't cover is declined BEFORE any details are taken. */
+  async notOurTrade() {
+    await reset();
+    // Adaptive: the flow checks the area before the system, so she asks for the
+    // postcode and address first. A fixed script runs out of turns before she
+    // ever reaches the question that declines the job.
+    const { text } = await runAdaptive(
+      [
+        { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road.' },
+        { match: /what have you got|gas boiler|something else|what.*system/i, reply: "It's air conditioning — a wall unit." },
+      ],
+      {
+        name: 'notOurTrade',
+        opener: 'Hi, my air conditioning has stopped working.',
+        quiet: true,
+        maxTurns: 8,
+        done: async () => {
+          const st = await stateOf();
+          return Boolean(st && st.systemCovered === false);
+        },
+      }
+    );
+
+    check('notOurTrade', 'declines the job', /don'?t cover|not something we cover|can'?t help|afraid/i.test(text), text.slice(0, 260));
+    check('notOurTrade', 'names the right trade', /refrigeration|air con/i.test(text), text.slice(0, 260));
+    check('notOurTrade', 'never asks a fault question',
+      !/what.*doing|error code|pilot light|what make/i.test(text), text);
+    check('notOurTrade', 'offers no appointment', !TIME_OFFER.test(text), text.slice(-200));
+
+    const st = await stateOf();
+    if (st) {
+      check('notOurTrade', 'system marked not covered', st.systemCovered === false, String(st.systemCovered));
+      check('notOurTrade', 'gate B stays shut', st.gate.B === false, JSON.stringify(st.gate));
+    }
+  },
+
+  /** No live tracking exists, so an ETA must never be invented. */
+  async engineerEta() {
+    await reset();
+    const { text } = await run(
+      ["Hi, where's the engineer? He was supposed to be here this morning.", 'My number is 07700 900123.'],
+      { name: 'engineerEta', quiet: true }
+    );
+
+    check('engineerEta', 'never guesses an arrival time',
+      !/should be with you|on his way|about \d+ minutes|within the hour|shortly after/i.test(text), text.slice(0, 300));
+    check('engineerEta', 'offers an office callback', /ring you|call you|get back to you|office/i.test(text), text.slice(0, 300));
+    check('engineerEta', 'does not book a new visit', !TIME_OFFER.test(text), text.slice(0, 300));
+  },
+
   async dontKnow() {
     await reset();
     const { transcript } = await run(

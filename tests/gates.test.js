@@ -401,3 +401,45 @@ test('the lane picks the appointment type', () => {
   restore();
   assert.notEqual(process.env.CALCOM_EVENT_TYPE_ID, '111', 'env restored for later tests');
 });
+
+/* -------------------------------- the model cannot award itself an open gate */
+
+test('a model-declared "existing" lane does not open gate B', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'existing';   // exactly what the model did to an air-con caller
+  assert.equal(s.isExistingCustomer, false);
+  assert.equal(state.gateB(s), false,
+    'an empty field list must not be vacuously satisfied');
+
+  // The real route stays open: a genuine find_booking match still exempts them.
+  s.isExistingCustomer = true;
+  assert.equal(state.gateB(s), true);
+});
+
+test('the emergency lane never opens gate B', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'emergency';
+  assert.equal(state.gateB(s), false);
+});
+
+test('an unchecked system never opens gate B', () => {
+  const s = fresh();
+  s.lane = 'repair';
+  s.diagnostics.fault = 'no heating';
+  s.diagnostics.makeModel = 'Worcester';
+  s.diagnostics.symptoms = 'not given';
+  assert.equal(s.systemCovered, null, 'system check has not happened');
+  assert.equal(state.gateB(s), false, 'cannot book without knowing what it is');
+
+  s.systemCovered = true;
+  assert.equal(state.gateB(s), true);
+});
+
+test('an unknown lane name cannot open gate B', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'somethingElse';
+  assert.equal(state.gateB(s), false);
+});

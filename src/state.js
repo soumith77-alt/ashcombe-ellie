@@ -121,10 +121,24 @@ function gateA(state) {
  * we decline before taking details rather than after.
  */
 function gateB(state) {
+  // The ONLY free pass, and it is earned server-side by a real find_booking match.
   if (state.isExistingCustomer) return true;
-  if (state.systemCovered === false || state.systemCovered === 'unclear') return false;
+
+  // You cannot book a visit without knowing what the engineer is coming to.
+  // `null` counts as not knowing — the check simply hasn't happened yet.
+  if (state.systemCovered !== true) return false;
+
   if (!state.lane) return false;
-  const fields = LANE_FIELDS[state.lane] || LANE_FIELDS.repair;
+
+  // `lane` is supplied by the model, and two lanes have no questions of their own:
+  // "existing" (qualified when the visit was booked) and "emergency" (never books).
+  // An empty field list means every() is vacuously true, so a model that labels an
+  // air-conditioning caller "existing" would hand itself an open gate — which is
+  // exactly what happened in testing. Those two lanes can never open Gate B here;
+  // the existing-customer route goes through isExistingCustomer above.
+  const fields = LANE_FIELDS[state.lane];
+  if (!Array.isArray(fields) || fields.length === 0) return false;
+
   return fields.every((f) => isAnswered(state.diagnostics[f]));
 }
 
