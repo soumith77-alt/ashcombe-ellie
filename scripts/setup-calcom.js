@@ -18,8 +18,21 @@ const cal = require('../src/calcom');
 const business = require('../config/business.json');
 
 const SCHEDULE_NAME = 'Ashcombe Engineers';
-const EVENT_TITLE = 'Engineer Visit';
-const EVENT_SLUG = 'engineer-visit';
+
+/**
+ * One appointment type per lane. A survey is a sales visit and rarely needs two
+ * hours; a certificate is shorter than a breakdown. Booking everything into the
+ * same 120-minute slot fills the diary faster than the work actually does, and
+ * the office can't tell a 20-minute certificate from a two-hour repair.
+ */
+const EVENT_TYPES = [
+  { key: 'CALCOM_EVENT_TYPE_ID',      title: 'Engineer Visit',      slug: 'engineer-visit', minutes: 120,
+    description: 'Repair — engineer attendance window booked by phone.' },
+  { key: 'CALCOM_EVENT_TYPE_SERVICE', title: 'Service / Certificate', slug: 'service-visit',  minutes: 90,
+    description: 'Annual service or landlord gas safety certificate.' },
+  { key: 'CALCOM_EVENT_TYPE_SURVEY',  title: 'New Boiler Survey',   slug: 'boiler-survey',  minutes: 60,
+    description: 'Free, no-obligation survey and fixed quote for a new boiler.' },
+];
 
 async function ensureSchedule() {
   const list = await cal.call('/schedules', { version: cal.API_VERSION.SCHEDULES });
@@ -53,35 +66,41 @@ async function ensureSchedule() {
   return r.json.data.id;
 }
 
-async function ensureEventType(scheduleId) {
+async function ensureEventTypes(scheduleId) {
   const list = await cal.getEventTypes();
-  const existing = (list.json.data || []).find((e) => e.slug === EVENT_SLUG);
-  if (existing) {
-    console.log(`  event type "${EVENT_TITLE}" already exists -> id=${existing.id} (${existing.lengthInMinutes}min, scheduleId=${existing.scheduleId})`);
-    return existing.id;
-  }
+  const have = list.json.data || [];
+  const ids = {};
 
-  const r = await cal.call('/event-types', {
-    method: 'POST',
-    version: cal.API_VERSION.EVENT_TYPES,
-    body: {
-      title: EVENT_TITLE,
-      slug: EVENT_SLUG,
-      lengthInMinutes: business.slotLengthMinutes,
-      description: 'Engineer attendance window booked by phone.',
-      scheduleId,
-      minimumBookingNotice: 120,
-      slotInterval: 60,
-      locations: [{ type: 'attendeeAddress' }],
-      disableGuests: true,
-    },
-  });
-  if (!r.ok) {
-    console.error('  FAILED to create event type:', r.status, JSON.stringify(r.json).slice(0, 900));
-    process.exit(1);
+  for (const t of EVENT_TYPES) {
+    const existing = have.find((e) => e.slug === t.slug);
+    if (existing) {
+      console.log(`  event type "${t.title}" exists -> id=${existing.id} (${existing.lengthInMinutes}min)`);
+      ids[t.key] = existing.id;
+      continue;
+    }
+    const r = await cal.call('/event-types', {
+      method: 'POST',
+      version: cal.API_VERSION.EVENT_TYPES,
+      body: {
+        title: t.title,
+        slug: t.slug,
+        lengthInMinutes: t.minutes,
+        description: t.description,
+        scheduleId,
+        minimumBookingNotice: 120,
+        slotInterval: 60,
+        locations: [{ type: 'attendeeAddress' }],
+        disableGuests: true,
+      },
+    });
+    if (!r.ok) {
+      console.error(`  FAILED to create "${t.title}":`, r.status, JSON.stringify(r.json).slice(0, 600));
+      process.exit(1);
+    }
+    console.log(`  created "${t.title}" -> id=${r.json.data.id} (${r.json.data.lengthInMinutes}min)`);
+    ids[t.key] = r.json.data.id;
   }
-  console.log(`  created event type -> id=${r.json.data.id} (${r.json.data.lengthInMinutes}min)`);
-  return r.json.data.id;
+  return ids;
 }
 
 function writeEnv(kv) {
@@ -136,8 +155,9 @@ async function ensureWebhook() {
 (async () => {
   console.log('Cal.com setup');
   const scheduleId = await ensureSchedule();
-  const eventTypeId = await ensureEventType(scheduleId);
-  writeEnv({ CALCOM_SCHEDULE_ID: scheduleId, CALCOM_EVENT_TYPE_ID: eventTypeId });
+  const ids = await ensureEventTypes(scheduleId);
+  const eventTypeId = ids.CALCOM_EVENT_TYPE_ID;
+  writeEnv({ CALCOM_SCHEDULE_ID: scheduleId, ...ids });
   await ensureWebhook();
 
   console.log('\nVerifying slots come back in London booking hours...');

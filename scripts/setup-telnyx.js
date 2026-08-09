@@ -73,6 +73,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'system_type',
+    description:
+      "Check whether we cover the kind of system the caller has. Call this BEFORE any question about a fault — the fault questions are gas boiler questions and are wrong for a heat pump or a storage heater. Returns covered true, false or unclear.",
+    url: `${BASE}/tools/system-type`,
+    timeout_ms: 3000,
+    body: {
+      type: 'object',
+      properties: {
+        systemDescription: str("What the caller says they have, in their words — \"gas combi\", \"Worcester\", \"air con\", \"storage heaters\"."),
+      },
+      required: ['systemDescription'],
+    },
+  },
+  {
     name: 'next_question',
     description:
       "Ask what still needs to be captured and what to say next. Call this whenever you lose your place — especially straight after answering a question about the business — so you return to the right point instead of drifting to booking.",
@@ -89,14 +103,29 @@ const TOOLS = [
     body: {
       type: 'object',
       properties: {
-        address: str('Full address: house number and street, plus town.'),
+        addressLine1: str('House number and street only, e.g. "14 Oak Road". Never ask for the town.'),
+        addressExtra: str('Town, flat number or anything else the caller volunteers. Never ask for this.'),
         postcode: str('Postcode.'),
+        lane: str('Which kind of call this is: repair, service, newBoiler, existing, or emergency.'),
+        callerRelationship: str('One of: owner, tenant, landlord, agent.'),
+        systemType: str('What the caller says they have, in their words.'),
         issueType: str("One of: repair, service, install, landlord_cert."),
         fault: str("What the boiler is actually doing, in the caller's own words."),
         probeAnswer: str('The answer to your one follow-up probe about the fault.'),
         makeModel: str("Boiler make and model, or 'not given'."),
         gcOrErrCode: str("Error code on the display or GC number, or 'not given'."),
         symptoms: str("Other visible symptoms: water, warning lights, pilot light, or 'not given'."),
+        duration: str('How long it has been like this, and whether it is constant or intermittent.'),
+        previousWork: str('Whether anyone else has looked at it recently.'),
+        serviceType: str('SERVICE LANE: "service" or "certificate".'),
+        applianceCount: str('SERVICE LANE: just the boiler, or a fire or hob as well.'),
+        lastServiced: str('SERVICE LANE: when it was last done, and whether we did it.'),
+        certificateExpiry: str('SERVICE LANE: when the current certificate runs out.'),
+        accessContact: str('SERVICE LANE: who will let the engineer in, and their number.'),
+        currentSystem: str('NEW BOILER LANE: what they have now and roughly how old.'),
+        bedrooms: str('NEW BOILER LANE: how many bedrooms and bathrooms.'),
+        relocating: str('NEW BOILER LANE: whether the boiler is staying put or moving.'),
+        timescale: str('NEW BOILER LANE: roughly when they are thinking.'),
         name: str("Caller's full name."),
         phone: str('Best contact number.'),
         email: str('Email address for the confirmation.'),
@@ -106,7 +135,7 @@ const TOOLS = [
   {
     name: 'check_availability',
     description:
-      'Look at the engineers\' diary and get real appointment times. Say "Let me have a look at the diary" before calling this. Only offer times this returns — never invent one. Refuses until the address, postcode and all four fault questions are done.',
+      'Look at the engineers\' diary and get real appointment times. Say "Let me have a look at the diary" before calling this. Only offer times this returns — never invent one. Refuses until the address and postcode are confirmed, the system is one we cover, and this lane's own questions are answered.',
     url: `${BASE}/tools/availability`,
     timeout_ms: 9000,
     body: {
@@ -265,12 +294,20 @@ function assistantPayload(toolIds) {
     model: MODEL,
     instructions,
     tool_ids: toolIds,
-    greeting: "Good morning, Ashcombe Heating, Ellie speaking — how can I help?",
+    // Short on purpose. A switchboard line is said hundreds of times a day and
+    // the caller isn't listening closely; shorter reads faster than any rate
+    // setting can. "Good morning" also went out at noon.
+    greeting: 'Ashcombe Heating, Ellie speaking — how can I help?',
     description: 'Phone receptionist: qualifies heating callers and books engineer visits.',
     voice_settings: {
       // en-GB, Telnyx-hosted so no third-party key is needed.
       voice: 'Telnyx.Ultra.fb02b554-7d64-4f90-841e-e57fc88f410c', // Ailsa — Warm Guide
-      voice_speed: 1.0,
+      // Brisk professional, not rushed. SSML is NOT honoured by this voice —
+      // verified by sending <prosody rate="130%"> and getting LONGER audio back,
+      // i.e. the tags get spoken. So pace is global only, which is why this is a
+      // modest 8%: it applies to the gas-emergency script too, and a meaningful
+      // share of callers to a heating firm are elderly.
+      voice_speed: 1.08,
       // No filler-message feature exists in the API; a quiet office bed keeps a
       // 1-2s tool pause from reading as a dropped call.
       background_audio: { type: 'predefined_media', value: 'office', volume: 0.3 },

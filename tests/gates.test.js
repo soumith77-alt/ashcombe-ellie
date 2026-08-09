@@ -27,9 +27,14 @@ function fresh(id = 'test-call') {
 }
 
 function fullyQualified(s) {
-  s.location.address = '14 Oak Road, Didsbury';
+  s.location.addressLine1 = '14 Oak Road';
+  s.location.addressExtra = 'Didsbury';
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
+  s.systemCovered = true;
+  s.systemType = 'Worcester combi';
+  s.callerRelationship = 'owner';
+  s.lane = 'repair';
   s.diagnostics.issueType = 'repair';
   s.diagnostics.fault = 'no hot water, heating fine';
   s.diagnostics.makeModel = 'Worcester combi';
@@ -42,32 +47,88 @@ function fullyQualified(s) {
 
 /* ------------------------------------------------------------------ Gate A */
 
-test('gate A is shut until postcode, address AND in-area all hold', () => {
+test('gate A needs first line, postcode and in-area — and nothing more', () => {
   const s = fresh();
   assert.equal(state.gateA(s), false, 'empty state');
 
   s.location.postcode = 'M20 2RT';
   assert.equal(state.gateA(s), false, 'postcode alone is not enough');
 
-  s.location.address = '14 Oak Road';
+  s.location.addressLine1 = '14 Oak Road';
   assert.equal(state.gateA(s), false, 'area not yet confirmed');
 
   s.location.inArea = 'unclear';
   assert.equal(state.gateA(s), false, '"unclear" must not open the gate');
 
   s.location.inArea = true;
+  assert.equal(state.gateA(s), true, 'house number, street and postcode is all an engineer needs');
+});
+
+test('the town is never required and never asked for', () => {
+  const s = fresh();
+  // Exactly the client's failing case: "It's 14 Oak Road", then "M20 2RT".
+  tools.recordDetails(s, { addressLine1: '14 Oak Road' });
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+
+  assert.equal(state.gateA(s), true, 'Gate A must open with no further address question');
+  assert.equal(s.location.addressExtra, null, 'nothing invented');
+  assert.ok(!state.missingFields(s).some((f) => /address/i.test(f)),
+    'no outstanding address question');
+  assert.ok(!/address|town|street/i.test(tools.nextQuestionTool(s).say),
+    'must not ask for more address');
+});
+
+test('a model still sending the old `address` field does not stall the gate', () => {
+  const s = fresh();
+  tools.recordDetails(s, { address: '14 Oak Road' });
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  assert.equal(s.location.addressLine1, '14 Oak Road');
   assert.equal(state.gateA(s), true);
 });
 
-test('gate B needs all four diagnostics, and "not given" counts as answered', () => {
+test('gate B follows the lane, and "not given" counts as answered', () => {
   const s = fresh();
-  s.diagnostics.issueType = 'repair';
+  s.systemCovered = true;
+
+  // Repair still needs its fault questions.
+  s.lane = 'repair';
   s.diagnostics.fault = 'no heating';
   assert.equal(state.gateB(s), false);
-
   s.diagnostics.makeModel = 'not given';
   s.diagnostics.symptoms = 'not given';
   assert.equal(state.gateB(s), true, '"not given" is a complete answer');
+});
+
+test('a service call books WITHOUT any fault questions', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'service';
+  assert.equal(state.gateB(s), false);
+
+  s.diagnostics.serviceType = 'certificate';
+  s.diagnostics.applianceCount = 'boiler and a hob';
+  assert.equal(state.gateB(s), true, 'service must not be locked out by fault fields');
+  assert.equal(s.diagnostics.fault, null, 'and must never have been asked for a fault');
+});
+
+test('a new boiler call gates on the survey questions, not the fault ones', () => {
+  const s = fresh();
+  s.systemCovered = true;
+  s.lane = 'newBoiler';
+  s.diagnostics.currentSystem = 'back boiler, about 20 years old';
+  assert.equal(state.gateB(s), false, 'still needs the sizing question');
+  s.diagnostics.bedrooms = '3 bed, 1 bath';
+  assert.equal(state.gateB(s), true);
+});
+
+test('a system we do not cover never opens gate B, however complete the answers', () => {
+  const s = fullyQualified(fresh());
+  assert.equal(state.gateB(s), true);
+
+  s.systemCovered = false;
+  assert.equal(state.gateB(s), false, 'declined before details, not after');
+  s.systemCovered = 'unclear';
+  assert.equal(state.gateB(s), false, 'never guess the trade');
 });
 
 /* -------------------------------------------- availability must not leak out */
@@ -85,7 +146,7 @@ test('check_availability with both gates shut refuses AND never touches Cal.com'
 
 test('check_availability refuses when only gate A is open', async () => {
   const s = fresh();
-  s.location.address = '14 Oak Road';
+  s.location.addressLine1 = '14 Oak Road';
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
 
@@ -188,7 +249,10 @@ test('next_question hands back the outstanding question, never a time offer', ()
 
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
-  s.location.address = '14 Oak Road';
+  s.location.addressLine1 = '14 Oak Road';
+  s.systemCovered = true;
+  s.callerRelationship = 'owner';
+  s.lane = 'repair';
   s.diagnostics.issueType = 'repair';
   s.diagnostics.fault = 'no hot water';
   s.diagnostics.probeAnswer = 'heating is fine';
@@ -273,4 +337,67 @@ test('a matched booking exempts the caller from both gates', () => {
   assert.equal(state.gateA(s), true, 'they were gated when the visit was first booked');
   assert.equal(state.gateB(s), true);
   assert.deepEqual(state.missingFields(s), [], 'nothing left to ask them');
+});
+
+/* ------------------------------------------- what we cover, and what we don't */
+
+test('system scope: gas in, everything else declined before details', () => {
+  const sys = require('../src/systemType');
+
+  for (const yes of ['gas boiler', 'Worcester combi', 'Vaillant', 'back boiler', 'gas hob']) {
+    assert.equal(sys.check(yes).covered, true, `${yes} should be covered`);
+  }
+  for (const no of ['air conditioning', 'heat pump', 'oil boiler', 'LPG', 'storage heaters', 'solar panels']) {
+    const r = sys.check(no);
+    assert.equal(r.covered, false, `${no} should be declined`);
+    assert.ok(/sorry|afraid/i.test(r.say), `should decline politely: "${r.say}"`);
+    assert.ok(!/postcode|make|fault/i.test(r.say), 'must not keep taking details');
+  }
+  assert.equal(sys.check('some sort of heating thing').covered, 'unclear', 'never guess the trade');
+
+  // "electric boiler" contains "boiler" — the wrong answer sends a gas engineer
+  // to something they cannot legally touch.
+  assert.equal(sys.check('electric boiler').covered, false, 'not-covered must win over covered');
+});
+
+test('an air-con caller is declined and never asked a fault question', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { addressLine1: '14 Oak Road' });
+
+  const r = tools.checkSystemType(s, { systemDescription: "it's the air conditioning" });
+  assert.equal(r.covered, false);
+  assert.ok(/refrigeration/i.test(r.say), `should name the right trade: "${r.say}"`);
+  assert.equal(state.gateB(s), false, 'must never reach the diary');
+  assert.ok(!/fault|make|what.*doing/i.test(tools.nextQuestionTool(s).say),
+    'no fault questions for a system we do not cover');
+});
+
+test('the lane picks the appointment type', () => {
+  // Restore afterwards: node:test shares one process, and leaving fake ids behind
+  // sends every live test after this one at an event type that doesn't exist.
+  const saved = {
+    repair: process.env.CALCOM_EVENT_TYPE_ID,
+    service: process.env.CALCOM_EVENT_TYPE_SERVICE,
+    survey: process.env.CALCOM_EVENT_TYPE_SURVEY,
+  };
+  const restore = () => {
+    process.env.CALCOM_EVENT_TYPE_ID = saved.repair;
+    if (saved.service) process.env.CALCOM_EVENT_TYPE_SERVICE = saved.service;
+    if (saved.survey) process.env.CALCOM_EVENT_TYPE_SURVEY = saved.survey;
+  };
+
+  process.env.CALCOM_EVENT_TYPE_ID = '111';
+  process.env.CALCOM_EVENT_TYPE_SERVICE = '222';
+  process.env.CALCOM_EVENT_TYPE_SURVEY = '333';
+  assert.equal(tools.eventTypeForLane('repair'), '111');
+  assert.equal(tools.eventTypeForLane('service'), '222');
+  assert.equal(tools.eventTypeForLane('newBoiler'), '333', 'a survey is not a two-hour repair slot');
+
+  // A missing env var must never stop a booking.
+  delete process.env.CALCOM_EVENT_TYPE_SURVEY;
+  assert.equal(tools.eventTypeForLane('newBoiler'), '111', 'falls back rather than failing');
+
+  restore();
+  assert.notEqual(process.env.CALCOM_EVENT_TYPE_ID, '111', 'env restored for later tests');
 });

@@ -21,9 +21,14 @@ const configured = Boolean(process.env.CALCOM_EVENT_TYPE_ID);
 function qualified(id) {
   state.reset();
   const s = state.get(id, '+447986321440');
-  s.location.address = '14 Oak Road, Didsbury';
+  s.location.addressLine1 = '14 Oak Road';
+  s.location.addressExtra = 'Didsbury';
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
+  s.systemCovered = true;
+  s.systemType = 'Worcester Bosch combi';
+  s.callerRelationship = 'owner';
+  s.lane = 'repair';
   s.diagnostics.issueType = 'repair';
   s.diagnostics.fault = 'no hot water, heating still on';
   s.diagnostics.probeAnswer = 'radiators all warm';

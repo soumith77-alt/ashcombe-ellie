@@ -15,6 +15,7 @@ const postcode = require('../postcode');
 const time = require('../time');
 const cal = require('../calcom');
 const jobDescription = require('../jobDescription');
+const systemType = require('../systemType');
 const auditLog = require('../log');
 const sheets = require('../sheets');
 const { nextQuestion, probeFor } = require('../questions');
@@ -85,6 +86,34 @@ function checkServiceArea(s, body) {
   return { ok: true, inArea: result.inArea, say: result.say };
 }
 
+/* ------------------------------------------------------- 1b. check_system_type */
+
+function checkSystemType(s, body) {
+  const r = systemType.check(body.systemDescription || body.systemType);
+
+  if (r.covered !== 'unclear' || body.systemDescription) {
+    s.systemType = String(body.systemDescription || body.systemType || '').trim() || s.systemType;
+  }
+  s.systemCovered = r.covered;
+  state.touch(s, { type: 'system_type', matched: r.matched, covered: r.covered });
+  auditLog.write({
+    type: 'system_result',
+    conversationId: s.conversationId,
+    systemType: s.systemType,
+    covered: r.covered,
+  });
+
+  if (r.covered === true) {
+    const next = nextQuestion(s);
+    return { ok: true, covered: true, say: next.say };
+  }
+
+  // Declined or unclear: this call will not reach the diary, so record why now.
+  s.outcome = r.covered === false ? 'system_not_covered' : 'system_unclear';
+  sheets.logCall(s, s.outcome, `system: ${s.systemType || 'not given'}`);
+  return { ok: true, covered: r.covered, say: r.say };
+}
+
 /* -------------------------------------------------------- 2. next_question */
 
 function nextQuestionTool(s) {
@@ -95,11 +124,30 @@ function nextQuestionTool(s) {
 
 /* -------------------------------------------------------- 3. record_details */
 
-const DIAG_KEYS = ['issueType', 'fault', 'probeAnswer', 'makeModel', 'gcOrErrCode', 'symptoms'];
+const DIAG_KEYS = [
+  'issueType', 'fault', 'probeAnswer', 'makeModel', 'gcOrErrCode', 'symptoms',
+  'duration', 'previousWork',
+  'serviceType', 'applianceCount', 'lastServiced', 'certificateExpiry', 'accessContact',
+  'currentSystem', 'bedrooms', 'bathrooms', 'relocating', 'timescale',
+];
 const CONTACT_KEYS = ['name', 'phone', 'email'];
+const TOP_KEYS = ['lane', 'callerRelationship', 'systemType'];
 
 function recordDetails(s, body) {
-  if (body.address !== undefined && body.address !== null) s.location.address = String(body.address).trim();
+  // `address` is still accepted and mapped, so a model that reaches for the old
+  // field name doesn't silently drop the one thing Gate A is waiting on.
+  const line1 = body.addressLine1 !== undefined ? body.addressLine1 : body.address;
+  if (line1 !== undefined && line1 !== null && String(line1).trim() !== '') {
+    s.location.addressLine1 = String(line1).trim();
+  }
+  if (body.addressExtra !== undefined && body.addressExtra !== null && String(body.addressExtra).trim() !== '') {
+    s.location.addressExtra = String(body.addressExtra).trim();
+  }
+  for (const k of TOP_KEYS) {
+    if (body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '') {
+      s[k] = String(body[k]).trim();
+    }
+  }
 
   if (body.postcode !== undefined && body.postcode !== null && String(body.postcode).trim() !== '') {
     const r = postcode.check(body.postcode);
@@ -149,7 +197,7 @@ async function checkAvailability(s, body) {
   const end = time.ymd(time.addDays(new Date(`${day}T12:00:00Z`), 7));
 
   const r = await cal.getSlots({
-    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    eventTypeId: eventTypeForLane(s.lane),
     start,
     end,
   });
@@ -222,6 +270,18 @@ function findOfferedSlot(s, chosenSlotLabel) {
   }) || null;
 }
 
+/**
+ * A survey is a sales visit, a service is shorter than a repair, and the office
+ * needs to see the difference in the diary. Falls back to the repair type when a
+ * lane-specific one isn't configured, so a missing env var can't stop a booking.
+ */
+function eventTypeForLane(lane) {
+  const repair = process.env.CALCOM_EVENT_TYPE_ID;
+  if (lane === 'service') return process.env.CALCOM_EVENT_TYPE_SERVICE || repair;
+  if (lane === 'newBoiler') return process.env.CALCOM_EVENT_TYPE_SURVEY || repair;
+  return repair;
+}
+
 async function bookAppointment(s, body) {
   const blocked = bookingBlocked(s);
   if (blocked) return blocked;
@@ -267,7 +327,7 @@ async function bookAppointment(s, body) {
   // Re-check the slot is still free: availability and booking are separate calls
   // and the office can fill it in between.
   const fresh = await cal.getSlots({
-    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    eventTypeId: eventTypeForLane(s.lane),
     start: time.ymd(new Date(slot.startIso)),
     end: time.ymd(time.addDays(new Date(slot.startIso), 1)),
   });
@@ -282,7 +342,7 @@ async function bookAppointment(s, body) {
   }
 
   const r = await cal.createBooking({
-    eventTypeId: process.env.CALCOM_EVENT_TYPE_ID,
+    eventTypeId: eventTypeForLane(s.lane),
     startIso: slot.startIso,
     name: s.contact.name,
     email: s.contact.email,
@@ -488,6 +548,8 @@ function flagEmergency(s, body) {
 
 module.exports = {
   checkServiceArea,
+  checkSystemType,
+  eventTypeForLane,
   nextQuestionTool,
   recordDetails,
   checkAvailability,

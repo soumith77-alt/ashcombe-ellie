@@ -11,7 +11,27 @@
 const TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 const store = new Map();
 
-const DIAGNOSTIC_FIELDS = ['issueType', 'fault', 'makeModel', 'symptoms'];
+/**
+ * What each lane must have answered before it may look at the diary.
+ *
+ * One list for every caller was the old mistake: it asked someone booking an annual
+ * service what fault their boiler had, and it locked the service and new-boiler
+ * lanes out of the diary entirely, because they are told not to ask fault questions.
+ * "not given" still counts as answered everywhere — a caller who doesn't know has
+ * still answered.
+ */
+const LANE_FIELDS = {
+  repair:    ['fault', 'makeModel', 'symptoms'],
+  service:   ['serviceType', 'applianceCount'],
+  newBoiler: ['currentSystem', 'bedrooms'],
+  existing:  [],
+  emergency: [],
+};
+
+const LANES = Object.keys(LANE_FIELDS);
+
+// Kept for the repair lane's own question set and for older callers of this module.
+const DIAGNOSTIC_FIELDS = LANE_FIELDS.repair;
 
 /** "not given" is a complete answer — a caller who doesn't know has still answered. */
 function isAnswered(value) {
@@ -25,15 +45,41 @@ function newState(conversationId, callerNumber) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
 
-    location: { address: null, postcode: null, inArea: null },
+    // First line plus postcode is what a Gas Safe engineer needs to find a
+    // property, and what the office would write down. Anything more is a
+    // requirement we invented. addressExtra holds whatever the caller volunteers
+    // — town, flat number — and is never asked for and never gates.
+    location: { addressLine1: null, postcode: null, addressExtra: null, inArea: null },
+
+    // Which kind of call this is, and what they've actually got. Both are decided
+    // before any lane questions, and both can end the call on their own.
+    lane: null,                  // repair | service | newBoiler | existing | emergency
+    systemType: null,            // what the caller says they have
+    systemCovered: null,         // true | false | "unclear"
+    callerRelationship: null,    // owner | tenant | landlord | agent
 
     diagnostics: {
+      // repair lane
       issueType: null,
       fault: null,
       probeAnswer: null,
       makeModel: null,
       gcOrErrCode: null,
       symptoms: null,
+      duration: null,
+      previousWork: null,
+      // service lane
+      serviceType: null,         // service | certificate
+      applianceCount: null,
+      lastServiced: null,
+      certificateExpiry: null,
+      accessContact: null,
+      // new boiler lane
+      currentSystem: null,
+      bedrooms: null,
+      bathrooms: null,
+      relocating: null,
+      timescale: null,
     },
 
     emergency: null, // null | "gas" | "co" | "water" | "electrical"
@@ -61,30 +107,46 @@ function newState(conversationId, callerNumber) {
 function gateA(state) {
   if (state.isExistingCustomer) return true;
   return (
-    isAnswered(state.location.address) &&
+    isAnswered(state.location.addressLine1) &&
     isAnswered(state.location.postcode) &&
     state.location.inArea === true
   );
 }
 
-/** Gate B — all four diagnostics answered. Skipped for existing customers. */
+/**
+ * Gate B — this lane's own questions are answered.
+ *
+ * Existing customers are exempt; they were qualified when the visit was booked.
+ * A system we don't cover never opens the gate, however complete the answers:
+ * we decline before taking details rather than after.
+ */
 function gateB(state) {
   if (state.isExistingCustomer) return true;
-  return DIAGNOSTIC_FIELDS.every((f) => isAnswered(state.diagnostics[f]));
+  if (state.systemCovered === false || state.systemCovered === 'unclear') return false;
+  if (!state.lane) return false;
+  const fields = LANE_FIELDS[state.lane] || LANE_FIELDS.repair;
+  return fields.every((f) => isAnswered(state.diagnostics[f]));
 }
 
 /** What is still outstanding, in the order the call should ask for it. */
 function missingFields(state) {
   const missing = [];
-  if (state.isExistingCustomer) return missing; // already diagnosed and located
+  if (state.isExistingCustomer) return missing; // already qualified and located
+
+  // Order matters and is not negotiable: danger, then area, then what they own,
+  // then who they are. Fault questions are gas-boiler questions — asking them of
+  // someone with a storage heater tells the caller you aren't listening.
   if (!isAnswered(state.location.postcode)) missing.push('postcode');
   else if (state.location.inArea !== true) missing.push('areaCheck');
-  if (!isAnswered(state.location.address)) missing.push('address');
+  if (!isAnswered(state.location.addressLine1)) missing.push('addressLine1');
 
-  if (!state.isExistingCustomer) {
-    for (const f of DIAGNOSTIC_FIELDS) {
-      if (!isAnswered(state.diagnostics[f])) missing.push(f);
-    }
+  if (state.systemCovered === null) missing.push('systemType');
+  else if (state.systemCovered !== true) missing.push('systemCheck');
+
+  if (!isAnswered(state.callerRelationship)) missing.push('callerRelationship');
+  if (!state.lane) missing.push('lane');
+  else for (const f of LANE_FIELDS[state.lane] || []) {
+    if (!isAnswered(state.diagnostics[f])) missing.push(f);
   }
   return missing;
 }
@@ -136,4 +198,6 @@ module.exports = {
   withGates,
   isAnswered,
   DIAGNOSTIC_FIELDS,
+  LANE_FIELDS,
+  LANES,
 };

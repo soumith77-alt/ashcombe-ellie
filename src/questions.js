@@ -11,18 +11,39 @@ const business = require('../config/business.json');
  * never "shall I check some times for you?".
  */
 const LINES = {
+  // opening checks, in order
   postcode:
     "Before we go any further — whereabouts is the property? If you give me the postcode I'll check we cover you.",
-  address:
-    "And what's the full address there — house number and street?",
-  issueType:
-    'And is this a repair, or were you after a service, or looking at a new boiler?',
+  // One question, and the town is never asked for. Hunting for a "full address"
+  // was what stalled callers who had already given everything an engineer needs.
+  addressLine1:
+    "And what's the address? Just the house number and street is fine, I've got the postcode.",
+  systemType:
+    "And what have you got there — a gas boiler, or something else?",
+  callerRelationship:
+    "And is it your own place, or are you calling as a tenant or a landlord?",
+  lane:
+    "And is this something that's broken, a service, or were you looking at a new boiler?",
+
+  // repair lane
   fault:
     "Right — and what's it actually doing at the moment?",
   makeModel:
     'Do you know what make it is? Worcester, Baxi, Vaillant, that sort of thing.',
   symptoms:
     "Anything else you've noticed? Water underneath it, warning lights, pilot light out?",
+
+  // service lane — never fault questions
+  serviceType:
+    "Is that a service you're after, or a landlord's gas safety certificate?",
+  applianceCount:
+    'Is it just the boiler, or is there a fire or a hob as well?',
+
+  // new boiler lane — ends in a survey, never a price
+  currentSystem:
+    "What have you got at the moment — a combi, a system boiler, a back boiler? And roughly how old is it?",
+  bedrooms:
+    'How many bedrooms and bathrooms has the property got?',
 };
 
 /** The one follow-up probe that fits the fault described. */
@@ -53,6 +74,17 @@ function nextQuestion(state) {
     };
   }
 
+  // A system we don't cover, or can't identify. Decline before taking details.
+  if (missing.includes('systemCheck')) {
+    const covered = state.systemCovered;
+    return {
+      missing,
+      say: covered === false
+        ? "That's not one for us I'm afraid, so I'd only be wasting your time taking the rest."
+        : `I'm not sure that's one for us, and I'd rather not send the wrong engineer out. Best ring the office on ${business.officePhone}.`,
+    };
+  }
+
   // Area check resolved to something other than a clean yes.
   if (missing.includes('areaCheck')) {
     if (state.location.inArea === false) {
@@ -77,7 +109,8 @@ function nextQuestion(state) {
 
   // The fault probe is a follow-up, not a gate — ask it once we have a fault
   // but before moving on to make and model.
-  if (first === 'makeModel' && state.diagnostics.fault && !state.diagnostics.probeAnswer) {
+  if (first === 'makeModel' && state.lane === 'repair' &&
+      state.diagnostics.fault && !state.diagnostics.probeAnswer) {
     const probe = probeFor(state.diagnostics.fault);
     if (probe) return { missing, say: probe };
   }

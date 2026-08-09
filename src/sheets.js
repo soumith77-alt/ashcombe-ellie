@@ -27,8 +27,8 @@ const CALL_LOG = 'Call log';
 
 const BOOKING_HEADERS = [
   'Booked at', 'Status', 'Appointment', 'Name', 'Phone', 'Email',
-  'Address', 'Postcode', 'Job type', 'Fault', 'Make & model', 'Code',
-  'Symptoms', 'Engineer notes', 'Cal.com UID', 'Call ref',
+  'Address', 'Postcode', 'Lane', 'Caller', 'System', 'Job type', 'Fault',
+  'Make & model', 'Code', 'Symptoms', 'Engineer notes', 'Cal.com UID', 'Call ref',
 ];
 
 const CALL_HEADERS = [
@@ -204,7 +204,7 @@ async function updateStatus(uid, status, appointment, newUid) {
   const sheets = await api();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: spreadsheetId(),
-    range: `${BOOKINGS}!O:O`, // Cal.com UID column
+    range: `${BOOKINGS}!R:R`, // Cal.com UID column
   });
   const rows = res.data.values || [];
   const idx = rows.findIndex((r) => r[0] === uid);
@@ -217,7 +217,7 @@ async function updateStatus(uid, status, appointment, newUid) {
   const updates = [{ range: `${BOOKINGS}!B${rowNumber}`, values: [[status]] }];
   if (appointment) updates.push({ range: `${BOOKINGS}!C${rowNumber}`, values: [[appointment]] });
   // A reschedule mints a new uid; keep the row findable next time.
-  if (newUid && newUid !== uid) updates.push({ range: `${BOOKINGS}!O${rowNumber}`, values: [[newUid]] });
+  if (newUid && newUid !== uid) updates.push({ range: `${BOOKINGS}!R${rowNumber}`, values: [[newUid]] });
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: spreadsheetId(),
@@ -237,8 +237,11 @@ function logBooking(state, label, engineerNotes) {
     row: [
       nowIso(), 'Booked', clean(label),
       clean(state.contact.name), clean(state.contact.phone), clean(state.contact.email),
-      clean(state.location.address), clean(state.location.postcode),
-      clean(state.diagnostics.issueType), clean(state.diagnostics.fault),
+      [clean(state.location.addressLine1), clean(state.location.addressExtra)].filter(Boolean).join(', '),
+      clean(state.location.postcode),
+      clean(state.lane), clean(state.callerRelationship), clean(state.systemType),
+      clean(state.diagnostics.issueType || state.diagnostics.serviceType),
+      clean(state.diagnostics.fault),
       clean(state.diagnostics.makeModel), clean(state.diagnostics.gcOrErrCode),
       clean(state.diagnostics.symptoms),
       clean(engineerNotes), clean(state.bookingUid), clean(state.conversationId),
@@ -253,6 +256,8 @@ function logStatusChange(uid, status, appointment, newUid) {
 function logCall(state, outcome, reason) {
   const captured = [
     state.location.postcode && `postcode ${state.location.postcode}`,
+    state.lane && `lane ${state.lane}`,
+    state.systemType && `system ${state.systemType}`,
     state.diagnostics.issueType && `job ${state.diagnostics.issueType}`,
     state.diagnostics.fault && `fault ${state.diagnostics.fault}`,
   ].filter(Boolean).join('; ');
