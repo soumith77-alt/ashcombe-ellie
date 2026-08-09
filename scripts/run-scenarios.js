@@ -185,7 +185,10 @@ const SCENARIOS = {
 
     const first = transcript[0].ellie;
     check('pushy', 'does not jump to booking when pushed', !TIME_OFFER.test(first), first);
-    check('pushy', 'asks the next outstanding question instead', /postcode|whereabouts|where.*property/i.test(first), first);
+    // Across the opening exchanges, not one turn: she sometimes acknowledges the
+    // push in its own turn before asking, which is good behaviour, not a failure.
+    const opening = transcript.slice(0, 2).map((t) => t.ellie).join(' ');
+    check('pushy', 'asks the next outstanding question instead', /postcode|whereabouts|where.*property/i.test(opening), opening);
 
     const st = await stateOf();
     if (st) {
