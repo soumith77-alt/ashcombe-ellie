@@ -43,11 +43,37 @@ function spreadsheetId() {
   return process.env.GOOGLE_SHEET_ID || null;
 }
 
-/** Off unless both the key file and the sheet id are present. */
+/**
+ * Credentials come from a file locally and from an env var when deployed.
+ *
+ * The key file is gitignored — correctly — so it does not exist on a host that
+ * deploys from the repo. GOOGLE_SERVICE_ACCOUNT_JSON carries the same JSON,
+ * raw or base64, and takes precedence. Without this the integration silently
+ * disables itself in production and nobody notices until the sheet stays empty.
+ */
+function credentials() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (raw && raw.trim()) {
+    const text = raw.trim().startsWith('{')
+      ? raw
+      : Buffer.from(raw, 'base64').toString('utf8');
+    return JSON.parse(text);
+  }
+  if (fs.existsSync(KEY_FILE)) return JSON.parse(fs.readFileSync(KEY_FILE, 'utf8'));
+  return null;
+}
+
+/** Off unless we have both a sheet id and usable credentials. */
 function isEnabled() {
   if (enabled === null) {
-    enabled = Boolean(spreadsheetId()) && fs.existsSync(KEY_FILE);
-    if (!enabled) console.log('[sheets] disabled (no GOOGLE_SHEET_ID or key file)');
+    let creds = null;
+    try { creds = credentials(); } catch (err) {
+      console.error('[sheets] credentials unreadable:', err.message);
+    }
+    enabled = Boolean(spreadsheetId()) && Boolean(creds);
+    if (!enabled) {
+      console.log(`[sheets] disabled (sheet id: ${spreadsheetId() ? 'set' : 'missing'}, credentials: ${creds ? 'ok' : 'missing'})`);
+    }
   }
   return enabled;
 }
@@ -55,7 +81,7 @@ function isEnabled() {
 async function api() {
   if (client) return client;
   const { google } = require('googleapis');
-  const auth = new google.auth.GoogleAuth({ keyFile: KEY_FILE, scopes: SCOPES });
+  const auth = new google.auth.GoogleAuth({ credentials: credentials(), scopes: SCOPES });
   client = google.sheets({ version: 'v4', auth: await auth.getClient() });
   return client;
 }
