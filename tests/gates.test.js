@@ -552,3 +552,20 @@ test('book_appointment cannot ask for the same detail forever', async () => {
   assert.ok(reasons.includes('stuck'), `should escalate, got: ${JSON.stringify(reasons)}`);
   assert.equal(s.bookingUid, null, 'and must still never book without an email');
 });
+
+/* --------------------------------------------- transient failures and retries */
+
+test('a write is never retried when the booking may already have landed', () => {
+  // Exported for exactly this: retrying a POST after a timeout or a 5xx can book
+  // the same caller twice, which is worse than telling them to ring the office.
+  const { safeToRetry } = require('../src/calcom');
+
+  assert.equal(safeToRetry('POST', 0), false, 'timeout on a write: may have landed');
+  assert.equal(safeToRetry('POST', 502), false, 'server error on a write: may have landed');
+  assert.equal(safeToRetry('POST', 429), true, 'rate limited means it was never processed');
+
+  assert.equal(safeToRetry('GET', 0), true);
+  assert.equal(safeToRetry('GET', 500), true);
+  assert.equal(safeToRetry('GET', 404), false, 'a real answer, not a blip');
+  assert.equal(safeToRetry('GET', 400), false);
+});

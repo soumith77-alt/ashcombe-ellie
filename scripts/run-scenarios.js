@@ -311,6 +311,17 @@ const SCENARIOS = {
     const originalUid = setup.bookingUid;
     console.log(`          (seeded ${av.slots[0].label} for Margaret Hollis)`);
 
+    // Cal.com's booking list is eventually consistent — measured at roughly two
+    // seconds. Starting the conversation immediately means find_booking looks
+    // before the booking is visible, which fails as "can't find it" and reads
+    // exactly like a broken lookup.
+    for (let i = 0; i < 8; i++) {
+      const probe = await cal.getBookings({ status: 'upcoming', take: '50' });
+      const rows = Array.isArray(probe.json.data) ? probe.json.data : [];
+      if (rows.some((b) => b.uid === originalUid)) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
     try {
       const { transcript } = await run(
         [
@@ -519,8 +530,15 @@ const SCENARIOS = {
   const want = process.argv.slice(2);
   const names = want.length ? want : Object.keys(SCENARIOS);
 
+  let first = true;
   for (const name of names) {
     if (!SCENARIOS[name]) { console.error(`unknown scenario: ${name}`); continue; }
+    // Breathe between scenarios. Run back to back, fourteen scenarios drive a
+    // burst of Cal.com slot lookups well above anything a real phone line
+    // produces, and the rate limit shows up as "trouble with the diary" —
+    // a test artefact that reads exactly like a product bug.
+    if (!first) await new Promise((r) => setTimeout(r, 6000));
+    first = false;
     console.log(`\n${name}`);
     try {
       await reset();
