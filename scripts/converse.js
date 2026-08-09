@@ -67,7 +67,12 @@ async function run(turns, { name = 'test', quiet = false } = {}) {
  * before the slots arrive. Every later answer then lands on the wrong question and
  * the run fails for no real reason. This replies based on what was said instead.
  *
- * @param {Array<{match: RegExp, reply: string, once?: boolean}>} answers
+ * Each answer may carry an `exclude` pattern — a guard for when one question
+ * contains another's keyword ("your email address?" matches both). Without it a
+ * scripted caller can answer the wrong question forever while the agent, quite
+ * correctly, keeps asking the right one.
+ *
+ * @param {Array<{match: RegExp, exclude?: RegExp, reply: string, once?: boolean}>} answers
  */
 async function runAdaptive(answers, { name = 'test', maxTurns = 18, opener, quiet = false, done } = {}) {
   const conversationId = await newConversation(name);
@@ -86,7 +91,9 @@ async function runAdaptive(answers, { name = 'test', maxTurns = 18, opener, quie
     if (done && (await done(transcript))) break;
 
     const candidate = answers.find(
-      (a, idx) => a.match.test(reply) && !(a.once && used.has(idx))
+      (a, idx) => a.match.test(reply) &&
+                  !(a.exclude && a.exclude.test(reply)) &&
+                  !(a.once && used.has(idx))
     );
     if (candidate) {
       used.add(answers.indexOf(candidate));

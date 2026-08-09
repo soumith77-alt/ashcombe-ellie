@@ -156,11 +156,13 @@ const SCENARIOS = {
 
   async outOfArea() {
     await reset();
-    const { transcript } = await run(
-      ["Hiya, boiler's not working", "It's EH1 1YZ, in Edinburgh"],
+    const { transcript, text } = await run(
+      ["Hiya, boiler's not working", "It's EH1 1YZ, in Edinburgh", 'Oh right, thanks anyway.'],
       { name: 'outOfArea', quiet: true }
     );
-    const reply = transcript[1].ellie;
+    // Assert across the whole call, not one turn: she sometimes spends a turn
+    // reading the postcode back before declining, which shifts every index.
+    const reply = text;
 
     check('outOfArea', 'declines politely', /sorry|afraid|don'?t (get|cover)|not.*cover/i.test(reply), reply);
     check('outOfArea', 'points at the Gas Safe Register', /gas safe/i.test(reply), reply);
@@ -210,7 +212,9 @@ const SCENARIOS = {
     const { transcript } = await runAdaptive(
       [
         { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
-        { match: /address|house number|street/i, reply: '14 Oak Road, Didsbury.' },
+        // `exclude` matters here: she says "your email address?", which would
+        // otherwise match the address rule and loop the caller forever.
+        { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road, Didsbury.' },
         { match: /repair.*service|service.*repair|new boiler|kind of job/i, reply: "It's a repair." },
         { match: /heating.*(alright|too|still)|radiators/i, reply: "The heating's still working fine, it's just the hot water." },
         // Answers make AND code together — she often asks for both in one breath,
@@ -250,18 +254,24 @@ const SCENARIOS = {
     check('happyPath', 'never spoke a booking uid', !st || !st.bookingUid || !all.includes(st.bookingUid));
 
     if (st && st.bookingUid) {
-      const b = await cal.getBookings({ status: 'upcoming', take: '50' });
-      const rows = Array.isArray(b.json.data) ? b.json.data : [];
-      const mine = rows.find((x) => x.uid === st.bookingUid);
+      // Cal.com's booking list is eventually consistent — a brand-new booking
+      // takes a second or two to appear. Poll rather than accuse it of failing.
+      let mine = null;
+      for (let i = 0; i < 6 && !mine; i++) {
+        const b = await cal.getBookings({ status: 'upcoming', take: '50' });
+        const rows = Array.isArray(b.json.data) ? b.json.data : [];
+        mine = rows.find((x) => x.uid === st.bookingUid);
+        if (!mine) await new Promise((r) => setTimeout(r, 1500));
+      }
       check('happyPath', 'booking is really in the Cal.com diary', Boolean(mine), st.bookingUid);
       if (mine) {
         const mins = (new Date(mine.end) - new Date(mine.start)) / 60000;
         check('happyPath', 'booked as a 120-minute attendance window', mins === 120, `${mins}min`);
         const desc = JSON.stringify(mine);
         check('happyPath', 'engineer notes carry the fault and the make', /worcester/i.test(desc) && /hot water/i.test(desc), desc.slice(0, 200));
-        await cal.cancelBooking(st.bookingUid, 'Automated scenario cleanup');
-        console.log('          (test booking cancelled)');
       }
+      await cal.cancelBooking(st.bookingUid, 'Automated scenario cleanup');
+      console.log('          (test booking cancelled)');
     }
   },
 
