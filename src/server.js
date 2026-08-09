@@ -97,7 +97,33 @@ function tool(name, handler) {
   };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+/**
+ * Health and configuration presence.
+ *
+ * Reports WHICH settings are present, never their values. A deploy with missing
+ * variables starts perfectly happily and then fails on the first tool call, which
+ * from the caller's side is just an agent that goes vague — the worst kind of
+ * failure to diagnose after the fact.
+ */
+app.get('/health', (_req, res) => {
+  const set = (v) => Boolean(v && String(v).trim());
+  res.json({
+    ok: true,
+    ts: new Date().toISOString(),
+    config: {
+      calcomApiKey: set(process.env.CALCOM_API_KEY),
+      calcomEventTypeId: set(process.env.CALCOM_EVENT_TYPE_ID),
+      telnyxApiKey: set(process.env.TELNYX_API_KEY),
+      telnyxAssistantId: set(process.env.TELNYX_ASSISTANT_ID),
+      googleSheetId: set(process.env.GOOGLE_SHEET_ID),
+      googleCredentials: set(process.env.GOOGLE_SERVICE_ACCOUNT_JSON) || require('fs').existsSync(
+        require('path').join(__dirname, '..', 'config', 'google-service-account.json')
+      ),
+      managerEmail: set(process.env.MANAGER_EMAIL),
+      publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
+    },
+  });
+});
 
 /**
  * Click-to-talk test page. Browser voice against the live assistant, so there's
