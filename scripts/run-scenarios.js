@@ -525,8 +525,36 @@ const SCENARIOS = {
 
 /* ---------------------------------------------------------------------- run */
 
+/**
+ * Every scenario is a real Telnyx conversation and costs real money — a full run
+ * is roughly fourteen of them. Run it on an empty account and the conversations
+ * error rather than fail loudly, so scenarios come back red in whatever order
+ * they happened to run and it reads exactly like flaky product behaviour.
+ *
+ * Learned by burning about eleven dollars chasing that ghost.
+ */
+async function assertCredit() {
+  try {
+    const res = await fetch('https://api.telnyx.com/v2/balance', {
+      headers: { Authorization: `Bearer ${process.env.TELNYX_API_KEY}` },
+    });
+    const bal = Number(((await res.json()).data || {}).available_credit);
+    if (!Number.isFinite(bal)) return;
+    console.log(`Telnyx credit: $${bal.toFixed(2)}`);
+    if (bal < 2) {
+      console.error(`\n  REFUSING TO RUN — $${bal.toFixed(2)} left.\n` +
+        '  A full suite costs roughly $2-3. Below that, conversations error out and\n' +
+        '  the results are meaningless: you get red scenarios that are really an\n' +
+        '  empty account. Top up at portal.telnyx.com, or run one scenario at a time.\n');
+      process.exit(2);
+    }
+    if (bal < 6) console.warn('  (enough for about one full run — watch it)\n');
+  } catch { /* never let the check itself block a run */ }
+}
+
 (async () => {
   if (!BASE) throw new Error('PUBLIC_BASE_URL not set');
+  await assertCredit();
   const want = process.argv.slice(2);
   const names = want.length ? want : Object.keys(SCENARIOS);
 
