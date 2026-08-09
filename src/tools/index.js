@@ -18,6 +18,7 @@ const jobDescription = require('../jobDescription');
 const systemType = require('../systemType');
 const auditLog = require('../log');
 const sheets = require('../sheets');
+const email = require('../email');
 const { nextQuestion, probeFor } = require('../questions');
 const business = require('../../config/business.json');
 
@@ -378,6 +379,8 @@ async function bookAppointment(s, body) {
   });
   // Fire and forget — a slow spreadsheet must never hold up a caller.
   sheets.logBooking(s, slot.label, jobDescription.build(s));
+  // The confirmation Ellie just promised the caller.
+  email.sendBooked(s, slot.label);
 
   return {
     ok: true,
@@ -488,6 +491,7 @@ async function rescheduleBooking(s, body) {
   state.touch(s, { type: 'rescheduled', label: slot.label });
   // Cal.com mints a new uid on reschedule; carry it into the sheet row.
   sheets.logStatusChange(previousUid, 'Rescheduled', slot.label, s.foundBooking.uid);
+  email.sendChanged(s, slot.label, 'rescheduled');
   return { ok: true, say: `That's moved to ${slot.label}. You'll get a new confirmation email through shortly.` };
 }
 
@@ -509,6 +513,7 @@ async function cancelBooking(s) {
   s.outcome = 'cancelled';
   state.touch(s, { type: 'cancelled' });
   sheets.logStatusChange(s.foundBooking.uid, 'Cancelled', null, null);
+  email.sendChanged(s, time.spokenLabel(s.foundBooking.startIso), 'cancelled');
   return { ok: true, say: "That's cancelled for you. Was there anything else?" };
 }
 

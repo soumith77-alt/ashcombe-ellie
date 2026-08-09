@@ -15,7 +15,8 @@
     "setup:telnyx": "node scripts/setup-telnyx.js",
     "setup:workflows": "node scripts/setup-calcom-workflows.js",
     "setup:sheets": "node scripts/setup-sheets.js",
-    "deploy:env": "node scripts/deploy-env.js"
+    "deploy:env": "node scripts/deploy-env.js",
+    "setup:email": "node scripts/setup-email.js"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,8 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "googleapis": "^174.0.1"
+    "googleapis": "^174.0.1",
+    "nodemailer": "^9.0.5"
   },
   "engines": {
     "node": ">=22"

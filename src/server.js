@@ -120,6 +120,7 @@ app.get('/health', (_req, res) => {
         require('path').join(__dirname, '..', 'config', 'google-service-account.json')
       ),
       managerEmail: set(process.env.MANAGER_EMAIL),
+      emailSending: set(process.env.GMAIL_USER) && set(process.env.GMAIL_APP_PASSWORD),
       publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
     },
   });
