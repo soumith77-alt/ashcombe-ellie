@@ -16,6 +16,7 @@ const time = require('../time');
 const cal = require('../calcom');
 const jobDescription = require('../jobDescription');
 const auditLog = require('../log');
+const sheets = require('../sheets');
 const { nextQuestion, probeFor } = require('../questions');
 const business = require('../../config/business.json');
 
@@ -78,6 +79,9 @@ function checkServiceArea(s, body) {
     const next = nextQuestion(s);
     return { ok: true, inArea: true, say: `${result.say} ${next.say}`.trim() };
   }
+  // The month-two question: how many callers did we turn away, and from where.
+  s.outcome = result.inArea === false ? 'out_of_area' : 'area_unclear';
+  sheets.logCall(s, s.outcome, `postcode ${result.outward || 'not heard'}`);
   return { ok: true, inArea: result.inArea, say: result.say };
 }
 
@@ -307,6 +311,8 @@ async function bookAppointment(s, body) {
     label: slot.label,
     postcode: s.location.postcode,
   });
+  // Fire and forget — a slow spreadsheet must never hold up a caller.
+  sheets.logBooking(s, slot.label, jobDescription.build(s));
 
   return {
     ok: true,
@@ -411,9 +417,12 @@ async function rescheduleBooking(s, body) {
         : `I can't move it just now — could you ring the office on ${OFFICE}?`,
     };
   }
+  const previousUid = s.foundBooking.uid;
   s.foundBooking.uid = (r.json.data && r.json.data.uid) || s.foundBooking.uid;
   s.outcome = 'rescheduled';
   state.touch(s, { type: 'rescheduled', label: slot.label });
+  // Cal.com mints a new uid on reschedule; carry it into the sheet row.
+  sheets.logStatusChange(previousUid, 'Rescheduled', slot.label, s.foundBooking.uid);
   return { ok: true, say: `That's moved to ${slot.label}. You'll get a new confirmation email through shortly.` };
 }
 
@@ -434,6 +443,7 @@ async function cancelBooking(s) {
   }
   s.outcome = 'cancelled';
   state.touch(s, { type: 'cancelled' });
+  sheets.logStatusChange(s.foundBooking.uid, 'Cancelled', null, null);
   return { ok: true, say: "That's cancelled for you. Was there anything else?" };
 }
 
@@ -464,6 +474,7 @@ function flagEmergency(s, body) {
   s.outcome = 'emergency';
   state.touch(s, { type: 'emergency', kind: s.emergency });
   auditLog.write({ type: 'outcome', outcome: 'emergency', conversationId: s.conversationId, kind: s.emergency });
+  sheets.logCall(s, 'emergency', `${s.emergency} — safety advice given, booking refused`);
 
   const script = (SAFETY_SCRIPTS[s.emergency] || SAFETY_SCRIPTS.gas).replace('{OFFICE}', OFFICE);
   return {
