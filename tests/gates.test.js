@@ -7,6 +7,22 @@
  */
 
 require('dotenv').config();
+
+/**
+ * The tests must never touch the client's spreadsheet or send mail.
+ *
+ * They found this out the hard way: a run of the failed-booking tests put six
+ * "NEEDS CALLBACK" rows in the live Bookings tab — the exact tab the office is
+ * being told to treat as work to do. Blanking the sheet id here disables the
+ * integration before anything asks whether it's on, and clearing the mail
+ * credentials does the same for the manager's inbox. Both are read lazily and
+ * cached on first use, so this has to happen before the first tool call.
+ */
+process.env.GOOGLE_SHEET_ID = '';
+process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '';
+process.env.GMAIL_USER = '';
+process.env.GMAIL_APP_PASSWORD = '';
+
 const assert = require('node:assert/strict');
 const { test, beforeEach } = require('node:test');
 

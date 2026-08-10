@@ -6,9 +6,16 @@
  * This is the one test that writes: it books, verifies the booking exists with the
  * right duration and job description, then cancels itself so the diary is left as
  * it was found. Skipped automatically when CALCOM_EVENT_TYPE_ID isn't configured.
+ *
+ * It writes to Cal.com deliberately and cleans up after itself. It must not write
+ * to the client's spreadsheet or the manager's inbox, which have no such undo.
  */
 
 require('dotenv').config();
+process.env.GOOGLE_SHEET_ID = '';
+process.env.GOOGLE_SERVICE_ACCOUNT_JSON = '';
+process.env.GMAIL_USER = '';
+process.env.GMAIL_APP_PASSWORD = '';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
