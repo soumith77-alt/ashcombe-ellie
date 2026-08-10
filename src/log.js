@@ -46,7 +46,7 @@ function summary() {
     booked: Boolean(s.bookingUid),
     captured: {
       postcode: s.location.postcode,
-      address: s.location.address,
+      address: s.location.addressLine1,
       issueType: s.diagnostics.issueType,
       fault: s.diagnostics.fault,
       makeModel: s.diagnostics.makeModel,
@@ -74,6 +74,9 @@ function summary() {
       turnedAwayOutOfArea: area.filter((e) => e.inArea === false).length,
       unclearArea: area.filter((e) => e.inArea === 'unclear').length,
       booked: outcomes.filter((e) => e.outcome === 'booked').length,
+      // Callers who reached a time and left without one. Counted separately from
+      // tool failures: a tool can fail and the call still recover.
+      lostAtBooking: outcomes.filter((e) => e.outcome === 'booking_failed').length,
       emergencies: outcomes.filter((e) => e.outcome === 'emergency').length,
       toolCalls: tools.length,
       toolFailures: tools.filter((e) => e.ok === false).length,

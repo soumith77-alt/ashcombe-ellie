@@ -40,9 +40,14 @@ const LINES = {
   applianceCount:
     'Is it just the boiler, or is there a fire or a hob as well?',
 
+  // The name, split. Asked as one question it came back as one mangled token with
+  // nothing to check it against, and an unusual name simply didn't register.
+  firstName:
+    "Can I take your first name?",
+  surname:
+    "And your surname — could you spell that one out for me?",
+
   // contact, asked only after a time has been chosen
-  name:
-    'Can I take your full name?',
   phone:
     'And the best number to get you on?',
   email:
@@ -63,6 +68,14 @@ const PROBES = [
   { match: /noise|bang|whistl|kettl|gurgl|hum/i, say: 'How would you describe it — banging, whistling, kettling? Only when it fires up, or all the time?' },
   { match: /dead|no display|won'?t turn on|nothing/i, say: 'Is there anything at all showing on the display?' },
 ];
+
+/**
+ * The things that come before any fault talk. Nothing jumps this queue — a probe
+ * about banging pipes must not arrive before we know we even cover the address.
+ */
+const OPENING_FIELDS = new Set([
+  'postcode', 'areaCheck', 'firstName', 'addressLine1', 'systemType', 'systemCheck',
+]);
 
 function probeFor(fault) {
   if (!fault) return null;
@@ -125,9 +138,13 @@ function nextQuestion(state) {
     };
   }
 
-  // The fault probe is a follow-up, not a gate — ask it once we have a fault
-  // but before moving on to make and model.
-  if (first === 'makeModel' && state.lane === 'repair' &&
+  // The fault probe is a follow-up, not a gate. It used to fire only when
+  // `makeModel` happened to be the next gap, so a caller who opened with "it's
+  // making a banging noise" was still walked through the generic "is it the heating
+  // or the hot water?" fork first — a question they had already answered before
+  // Ellie picked up. Now it fires the moment there is a fault to follow up on,
+  // as soon as the opening checks are out of the way.
+  if (!OPENING_FIELDS.has(first) && state.lane === 'repair' &&
       state.diagnostics.fault && !state.diagnostics.probeAnswer) {
     const probe = probeFor(state.diagnostics.fault);
     if (probe) return { missing, say: probe };

@@ -142,6 +142,48 @@ function managerEmail(state, label, kind) {
   return { subject: `${heading} — ${state.contact.name || 'customer'}, ${label}`, subject_: null, html: shell(heading, body) };
 }
 
+/**
+ * The one email that matters more than the confirmations.
+ *
+ * Ellie has just told a caller to ring the office. Most won't. This is the only
+ * thing standing between that and a customer nobody knows existed — so it carries
+ * everything needed to ring them back without asking a single question again.
+ * Manager only: the customer has already been told, and "your booking failed" in
+ * writing helps nobody.
+ */
+function lostBookingEmail(state, label, reason) {
+  const visit = VISIT[state.lane] || 'engineer visit';
+  const body = `
+    <div style="background:#fdecec;border:1px solid rgba(180,35,35,.28);border-radius:10px;
+      padding:12px 14px;margin-bottom:18px">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#a11b1b;margin-bottom:6px">
+        Ring this customer back</div>
+      <div style="font-size:14px;line-height:1.55">They asked for a ${esc(visit)} and Ellie
+        couldn't get it into the diary, so they were asked to ring the office. Assume they won't.</div>
+    </div>
+    <table style="border-collapse:collapse;width:100%;margin-bottom:18px">
+      ${row('Wanted', label)}
+      ${row('Customer', state.contact.name)}
+      ${row('Phone', state.contact.phone || state.callerNumber)}
+      ${row('Email', state.contact.email)}
+      ${row('Address', addressOf(state))}
+      ${row('Calling as', state.callerRelationship)}
+      ${row('System', state.systemType)}
+      ${row('What went wrong', reason)}
+    </table>
+    <div style="background:#fff3e4;border:1px solid rgba(194,87,10,.24);border-radius:10px;padding:12px 14px">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9a4406;margin-bottom:6px">
+        What they told us</div>
+      <pre style="margin:0;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.55;
+        white-space:pre-wrap;color:#1a1512">${esc(jobDescription.build(state))}</pre>
+    </div>`;
+  const who = state.contact.name || state.contact.phone || state.callerNumber || 'a caller';
+  return {
+    subject: `NOT BOOKED — ring ${who} back${label ? ` (wanted ${label})` : ''}`,
+    html: shell('A booking didn’t go through', body),
+  };
+}
+
 /* -------------------------------------------------------------- the queue */
 
 const queue = [];
@@ -193,6 +235,11 @@ function sendBooked(state, label) {
   enqueue({ to: config().manager, subject: m.subject, html: m.html });
 }
 
+function sendBookingFailed(state, label, reason) {
+  const m = lostBookingEmail(state, label, reason);
+  enqueue({ to: config().manager, subject: m.subject, html: m.html });
+}
+
 function sendChanged(state, label, kind) {
   const m = managerEmail(state, label, kind);
   enqueue({ to: config().manager, subject: m.subject, html: m.html });
@@ -220,4 +267,4 @@ async function verify() {
   return true;
 }
 
-module.exports = { isEnabled, verify, sendBooked, sendChanged, flush, _queue: queue };
+module.exports = { isEnabled, verify, sendBooked, sendBookingFailed, sendChanged, flush, _queue: queue };

@@ -125,6 +125,7 @@ function checkSystemType(s, body) {
 function nextQuestionTool(s) {
   // Asking "what next?" repeatedly and getting the same answer means the caller
   // isn't going to give it. Count it, so the third time we do something else.
+  state.nextTurn(s);
   const before = state.missingFields(s)[0];
   state.noteAsked(s, before);
   const { gateA, gateB } = gates(s);
@@ -140,10 +141,47 @@ const DIAG_KEYS = [
   'serviceType', 'applianceCount', 'lastServiced', 'certificateExpiry', 'accessContact',
   'currentSystem', 'bedrooms', 'bathrooms', 'relocating', 'timescale',
 ];
-const CONTACT_KEYS = ['name', 'phone', 'email'];
+// The name has its own handling below; these two are plain copies.
+const CONTACT_KEYS = ['phone', 'email'];
 const TOP_KEYS = ['lane', 'callerRelationship', 'systemType'];
 
+/**
+ * The name, however it arrives.
+ *
+ * It is asked as two questions now, but a caller who says "James Whitfield" to the
+ * first one gives both at once, and an older tool config may still send `name`.
+ * Whichever door it comes through, first and last end up where the gate looks —
+ * the same lesson as the address field.
+ */
+function applyName(s, body) {
+  for (const k of ['firstName', 'surname']) {
+    if (state.isAnswered(body[k])) s.contact[k] = String(body[k]).trim();
+  }
+
+  if (state.isAnswered(body.name)) {
+    const parts = String(body.name).trim().split(/\s+/);
+    if (!state.isAnswered(s.contact.firstName)) s.contact.firstName = parts[0];
+    if (parts.length > 1 && !state.isAnswered(s.contact.surname)) {
+      s.contact.surname = parts.slice(1).join(' ');
+    }
+  }
+
+  // A first name volunteered with a surname attached ("James Whitfield" to "can I
+  // take your first name?") is two answers, not one. Split it rather than asking
+  // for a surname they have already given.
+  const first = s.contact.firstName;
+  if (state.isAnswered(first) && /\s/.test(String(first).trim())) {
+    const parts = String(first).trim().split(/\s+/);
+    s.contact.firstName = parts[0];
+    if (!state.isAnswered(s.contact.surname)) s.contact.surname = parts.slice(1).join(' ');
+  }
+
+  s.contact.name = state.fullName(s);
+}
+
 function recordDetails(s, body) {
+  // A new caller turn. Everything outstanding may be counted once more.
+  state.nextTurn(s);
   const outstandingBefore = state.missingFields(s)[0];
 
   // There is ONE address field, and every name the model might reach for funnels
@@ -189,10 +227,15 @@ function recordDetails(s, body) {
       s.contact[k] = String(body[k]).trim();
     }
   }
+  applyName(s, body);
 
   if (body.emergency) s.emergency = String(body.emergency).trim();
 
   state.touch(s, { type: 'record', fields: Object.keys(body || {}) });
+
+  // The field we gave up on has arrived. Let the call carry on rather than
+  // repeating the office handoff at someone who is answering the question.
+  state.unstick(s);
 
   // Nothing moved: the same question is outstanding as before this call, so the
   // caller has now been asked and hasn't answered. That is the signal the old
@@ -310,16 +353,51 @@ function eventTypeForLane(lane) {
   return repair;
 }
 
+/**
+ * A booking that didn't happen is worth more to the office than one that did.
+ *
+ * The success path wrote a sheet row, an audit entry and two emails. The failure
+ * path wrote one in-memory event that is swept after two hours and lost on every
+ * restart — and the local JSONL it might have reached lives on Railway's ephemeral
+ * disk, so it doesn't survive a deploy either. A caller who wanted a Wednesday
+ * morning and got "ring the office" instead vanished completely: no name, no
+ * number, nobody to ring them back. Every one of those was a lost customer nobody
+ * could even count.
+ *
+ * Logged once per call — the model retries, the office shouldn't get three rows.
+ */
+function recordLostBooking(s, reason, wantedLabel) {
+  if (s.lossLogged) return;
+  s.lossLogged = true;
+  s.outcome = 'booking_failed';
+
+  state.touch(s, { type: 'booking_lost', reason, wanted: wantedLabel || null });
+  auditLog.write({
+    type: 'outcome',
+    outcome: 'booking_failed',
+    conversationId: s.conversationId,
+    reason,
+    wanted: wantedLabel || null,
+    postcode: s.location.postcode,
+  });
+  // Into the Bookings tab, not the call log — this needs a human to ring back, and
+  // the office watches that tab. The status column says so in words.
+  sheets.logBooking(s, wantedLabel || 'no time held', jobDescription.build(s), 'NEEDS CALLBACK');
+  email.sendBookingFailed(s, wantedLabel, reason);
+}
+
 async function bookAppointment(s, body) {
   const blocked = bookingBlocked(s);
   if (blocked) return blocked;
 
-  const missingContact = state.CONTACT_FIELDS.filter((k) => !state.isAnswered(s.contact[k]));
+  const missingContact = state.ALL_CONTACT_FIELDS.filter((k) => !state.isAnswered(s.contact[k]));
   if (missingContact.length) {
     // Count the refusal. Without this, book_appointment asks for the same detail
     // forever: it is the only thing that checks contact fields, so nothing else
-    // could ever notice the caller had already been asked.
+    // could ever notice the caller had already been asked. noteAsked counts once
+    // per caller turn, so the model retrying this call costs the caller nothing.
     const decision = state.noteAsked(s, missingContact[0]);
+    if (decision === 'stop') recordLostBooking(s, `gave up on ${missingContact[0]}`);
     const next = nextQuestion(s);
     return {
       ok: false,
@@ -382,6 +460,7 @@ async function bookAppointment(s, body) {
 
   if (!r.ok) {
     state.touch(s, { type: 'book_failed', status: r.status, body: JSON.stringify(r.json).slice(0, 300) });
+    recordLostBooking(s, `Cal.com refused the booking (${r.status})`, slot.label);
     return {
       ok: false,
       reason: 'booking_failed',
@@ -402,6 +481,9 @@ async function bookAppointment(s, body) {
   });
   // Fire and forget — a slow spreadsheet must never hold up a caller.
   sheets.logBooking(s, slot.label, jobDescription.build(s));
+  // An earlier attempt on this call failed and raised a callback. It's booked now,
+  // so close that row rather than having the office ring someone already in the diary.
+  if (s.lossLogged) sheets.resolveLoss(s.conversationId);
   // The confirmation Ellie just promised the caller.
   email.sendBooked(s, slot.label);
 

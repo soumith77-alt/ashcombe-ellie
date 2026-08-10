@@ -331,9 +331,9 @@ footer code { font-size: .95em; }
             <span class="gate-tag" id="tag-b">Shut</span>
           </div>
           <ul class="checks">
-            <li id="c-issue"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Job type<span class="val"></span></li>
+            <!-- Placeholder only: redrawn per lane by drawGateB() on the first state. -->
             <li id="c-fault"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Fault<span class="val"></span></li>
-            <li id="c-make"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Make &amp; model<span class="val"></span></li>
+            <li id="c-makeModel"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Make &amp; model<span class="val"></span></li>
             <li id="c-symptoms"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Other symptoms<span class="val"></span></li>
           </ul>
           <div class="rail"><i id="rail-b"></i></div>
@@ -413,7 +413,38 @@ footer code { font-size: .95em; }
   }
 
   var GATE_A = ['c-postcode', 'c-area', 'c-address'];
-  var GATE_B = ['c-issue', 'c-fault', 'c-make', 'c-symptoms'];
+
+  // Mirrors LANE_FIELDS in src/state.js. Gate B asks different questions per lane,
+  // and this list used to show the repair lane's four for everyone — with "Job type"
+  // at the top, which isn't a gate field at all. It sat unticked while the gate was
+  // open and ticked while it was shut, so the one panel meant to explain a stuck
+  // call was actively misleading about why.
+  var LANE_CHECKS = {
+    repair:    [['fault', 'Fault'], ['makeModel', 'Make &amp; model'], ['symptoms', 'Other symptoms']],
+    service:   [['serviceType', 'Service or certificate'], ['applianceCount', 'Appliances']],
+    newBoiler: [['currentSystem', 'Current system'], ['bedrooms', 'Bedrooms']],
+    existing:  [],
+    emergency: [],
+  };
+  var TICKMARK =
+    '<span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>';
+  var renderedLane = null;
+
+  function drawGateB(lane) {
+    if (lane === renderedLane) return;
+    renderedLane = lane;
+    var rows = LANE_CHECKS[lane] || LANE_CHECKS.repair;
+    var ul = document.querySelector('#gate-b .checks');
+    if (!ul) return;
+    if (!rows.length) {
+      ul.innerHTML = '<li class="done">' + TICKMARK + 'No questions for this lane<span class="val"></span></li>';
+      return;
+    }
+    ul.innerHTML = rows.map(function (r) {
+      return '<li id="c-' + r[0] + '">' + TICKMARK + r[1] + '<span class="val"></span></li>';
+    }).join('');
+  }
 
   function tick(id, on, value) {
     var li = $(id); if (!li) return;
@@ -434,15 +465,18 @@ footer code { font-size: .95em; }
     tick('c-postcode', loc.postcode, short(loc.postcode));
     tick('c-area', loc.inArea === true, loc.inArea === true ? 'yes' : '');
     tick('c-address', loc.addressLine1, short(loc.addressLine1));
-    tick('c-issue', d.issueType, short(d.issueType));
-    tick('c-fault', d.fault, short(d.fault));
-    tick('c-make', d.makeModel, short(d.makeModel));
-    tick('c-symptoms', d.symptoms, short(d.symptoms));
+
+    var lane = s.lane || 'repair';
+    drawGateB(lane);
+    var fields = (LANE_CHECKS[lane] || LANE_CHECKS.repair).map(function (r) { return r[0]; });
+    fields.forEach(function (f) { tick('c-' + f, d[f], short(d[f])); });
 
     var aDone = GATE_A.filter(function (id) { return $(id).classList.contains('done'); }).length;
-    var bDone = GATE_B.filter(function (id) { return $(id).classList.contains('done'); }).length;
+    var bDone = fields.filter(function (f) {
+      var li = $('c-' + f); return li && li.classList.contains('done');
+    }).length;
     $('rail-a').style.width = (aDone / GATE_A.length * 100) + '%';
-    $('rail-b').style.width = (bDone / GATE_B.length * 100) + '%';
+    $('rail-b').style.width = (fields.length ? (bDone / fields.length * 100) : 0) + '%';
 
     var A = !!(s.gate && s.gate.A), B = !!(s.gate && s.gate.B);
     $('gate-a').classList.toggle('open', A);

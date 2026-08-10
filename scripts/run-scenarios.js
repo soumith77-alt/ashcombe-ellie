@@ -81,6 +81,7 @@ const SCENARIOS = {
     const { transcript } = await run(
       [
         "No heating at all. It's M20 2RT, 14 Oak Road.",
+        'James Whitfield.',
         "It's a Worcester Bosch gas combi.",
         "It's my own place.",
         "It's broken — a repair. All the radiators are stone cold.",
@@ -180,6 +181,7 @@ const SCENARIOS = {
     const { transcript } = await run(
       ['Just book me in for tomorrow, I don\'t know anything about the boiler',
        "It's M20 2RT, 14 Oak Road",
+       'James Whitfield.',
        "It's a gas boiler. My own place.",
        "I told you, I don't know. It's a repair, it's just not firing up.",
        'No idea on the make. No code. Nothing else.'],
@@ -235,7 +237,11 @@ const SCENARIOS = {
         { match: /anyone else|looked at it|been out to it|had it looked/i, reply: "No, nobody else has touched it." },
         { match: /what day|day suits|morning or afternoon/i, reply: 'Wednesday morning would be good.' },
         { match: /any of those|any good|which.*suit|I can do/i, reply: 'The first one please.' },
-        { match: /full name|your name/i, reply: 'James Whitfield.' },
+        // The first name is asked early now — right after "we cover you" — so it can
+        // be used during the call rather than collected in the last thirty seconds.
+        { match: /first name/i, reply: 'James.' },
+        { match: /surname|last name|second name/i, reply: 'Whitfield. W, H, I, T, F, I, E, L, D.' },
+        { match: /full name/i, reply: 'James Whitfield.' },
         { match: /number|contact/i, reply: "It's 07986 321440." },
         { match: /email|spell/i, reply: 'J - W - H - I - T - F - I - E - L - D at gmail dot com' },
         { match: /all correct|got all that|is that right|check I'?ve got/i, reply: "Yes, that's all correct, go ahead and book it." },
@@ -360,6 +366,7 @@ const SCENARIOS = {
       [
         "Hiya, I need to book my annual boiler service.",
         "It's M20 2RT.",
+        'James.',
         '14 Oak Road.',
         "It's a Worcester gas combi.",
         "It's my own house.",
@@ -389,6 +396,7 @@ const SCENARIOS = {
       [
         "I'm after a price for a new boiler.",
         "M20 2RT.",
+        'James.',
         '14 Oak Road.',
         "It's a gas combi at the moment.",
         'I own it.',
@@ -419,6 +427,7 @@ const SCENARIOS = {
     const { text } = await runAdaptive(
       [
         { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /first name|your name/i, reply: 'James.' },
         { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road.' },
         { match: /what have you got|gas boiler|something else|what.*system/i, reply: "It's air conditioning — a wall unit." },
       ],
@@ -471,6 +480,7 @@ const SCENARIOS = {
     const { transcript } = await runAdaptive(
       [
         { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /first name|your name/i, reply: 'James.' },
         { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road, Didsbury.' },
         { match: /what have you got|gas boiler|something else|what.*system/i, reply: "It's a gas boiler, a Worcester." },
         { match: /own place|tenant|landlord|calling as/i, reply: "It's my own house." },
@@ -502,11 +512,54 @@ const SCENARIOS = {
     }
   },
 
+  /**
+   * The client's report: he opened with "it's making a banging noise" and was then
+   * asked whether it was the heating or the hot water — a question he had already
+   * answered before she picked up. The probe must follow what they actually said.
+   */
+  async namedFault() {
+    await reset();
+    const { text } = await runAdaptive(
+      [
+        { match: /postcode|whereabouts|where.*propert/i, reply: "It's M20 2RT." },
+        { match: /first name|your name/i, reply: 'Akrit.' },
+        { match: /address|house number|street/i, exclude: /e-?mail/i, reply: '14 Oak Road.' },
+        { match: /what have you got|gas boiler|something else|what.*system/i, reply: "It's a gas boiler, a Worcester." },
+        { match: /own place|tenant|landlord|calling as/i, reply: "It's my own house." },
+        { match: /banging|whistl|kettl|describe it|fires up/i, reply: "Banging, and only when it fires up." },
+      ],
+      {
+        name: 'namedFault',
+        opener: "Hi, my boiler's making a really loud banging noise.",
+        quiet: true,
+        maxTurns: 10,
+        done: async () => {
+          const st = await stateOf();
+          return Boolean(st && st.diagnostics.probeAnswer);
+        },
+      }
+    );
+
+    check('namedFault', 'never re-asks what they opened with',
+      !/heating that'?s gone|heating or the hot water|is it the heating/i.test(text), text.slice(0, 400));
+    check('namedFault', 'asks the probe that fits the noise',
+      /banging|whistling|kettling|fires up/i.test(text), text.slice(0, 400));
+
+    const st = await stateOf();
+    if (st) {
+      check('namedFault', 'the opening line was recorded as the fault',
+        /bang|noise/i.test(st.diagnostics.fault || ''), st.diagnostics.fault);
+      check('namedFault', 'and the first name was taken early',
+        /akrit/i.test(st.contact && st.contact.firstName || ''), st.contact && st.contact.firstName);
+    }
+  },
+
   async dontKnow() {
     await reset();
     const { transcript } = await run(
       [
         "No heating. It's M20 2RT, 14 Oak Road.",
+        'James.',
         "It's a gas boiler, and it's my own place.",
         "It's a repair, radiators are all cold.",
         'No idea what make it is.',

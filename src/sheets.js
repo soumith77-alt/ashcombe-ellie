@@ -179,6 +179,7 @@ async function run(job) {
   if (job.type === 'booking') return appendBooking(job.row);
   if (job.type === 'status') return updateStatus(job.uid, job.status, job.appointment, job.newUid);
   if (job.type === 'call') return appendCall(job.row);
+  if (job.type === 'resolve') return resolveLossRow(job.callRef, job.status);
 }
 
 async function append(tab, values) {
@@ -225,17 +226,55 @@ async function updateStatus(uid, status, appointment, newUid) {
   });
 }
 
+/**
+ * Close a "NEEDS CALLBACK" row when the same call goes on to book after all.
+ *
+ * A first attempt can fail and a second succeed thirty seconds later. Without this
+ * the office rings a customer who is already in the diary, which reads as chaos
+ * from the customer's side. Matched on the call ref, not the UID — a failed row
+ * has no UID, which is exactly what makes it a failure.
+ */
+async function resolveLossRow(callRef, status) {
+  if (!callRef) return;
+  const sheets = await api();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: spreadsheetId(),
+    range: `${BOOKINGS}!B:S`, // Status through Call ref
+  });
+  const rows = res.data.values || [];
+  // Last match wins: a call can only have one outstanding callback row.
+  for (let i = rows.length - 1; i >= 1; i--) {
+    const row = rows[i] || [];
+    if (row[17] === callRef && String(row[0] || '').toUpperCase() === 'NEEDS CALLBACK') {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: spreadsheetId(),
+        range: `${BOOKINGS}!B${i + 1}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[status]] },
+      });
+      return;
+    }
+  }
+}
+
 /* --------------------------------------------------------- public shapes */
 
 const nowIso = () => new Date().toISOString();
 const clean = (v) => (v === null || v === undefined ? '' : String(v));
 
-function logBooking(state, label, engineerNotes) {
+/**
+ * `status` carries the row's meaning. A booking that failed is written here too,
+ * as "NEEDS CALLBACK", because the office watches this tab and a caller who wanted
+ * a Wednesday morning and got "ring the office" is worth more attention than one
+ * who got booked. The Cal.com UID column is empty on those rows — there is no
+ * booking to point at, which is the whole problem.
+ */
+function logBooking(state, label, engineerNotes, status = 'Booked') {
   record({
     type: 'booking',
     uid: state.bookingUid,
     row: [
-      nowIso(), 'Booked', clean(label),
+      nowIso(), status, clean(label),
       clean(state.contact.name), clean(state.contact.phone), clean(state.contact.email),
       clean(state.location.addressLine1),
       clean(state.location.postcode),
@@ -251,6 +290,11 @@ function logBooking(state, label, engineerNotes) {
 
 function logStatusChange(uid, status, appointment, newUid) {
   record({ type: 'status', uid, status, appointment, newUid });
+}
+
+/** The call that failed to book has now booked — close its callback row. */
+function resolveLoss(callRef, status = 'Booked (after a failed attempt)') {
+  record({ type: 'resolve', callRef: clean(callRef), status });
 }
 
 function logCall(state, outcome, reason) {
@@ -307,9 +351,12 @@ async function summary() {
     source: 'google-sheet',
     bookings: {
       total: bookings.length,
-      live: bookings.filter((r) => statusOf(r) === 'booked').length,
+      live: bookings.filter((r) => statusOf(r).startsWith('booked')).length,
       rescheduled: bookings.filter((r) => statusOf(r) === 'rescheduled').length,
       cancelled: bookings.filter((r) => statusOf(r) === 'cancelled').length,
+      // The number the client will actually want: callers who got all the way to
+      // a time and left without one.
+      needsCallback: bookings.filter((r) => statusOf(r) === 'needs callback').length,
     },
     lostCalls: {
       total: calls.length,
@@ -326,7 +373,7 @@ async function summary() {
 
 module.exports = {
   isEnabled, ensureTabs, record, flush, summary,
-  logBooking, logStatusChange, logCall,
+  logBooking, logStatusChange, logCall, resolveLoss,
   BOOKINGS, CALL_LOG, BOOKING_HEADERS, CALL_HEADERS,
   _queue: queue,
 };

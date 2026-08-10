@@ -30,8 +30,35 @@ const LANE_FIELDS = {
 
 const LANES = Object.keys(LANE_FIELDS);
 
+/**
+ * The caller's name, asked early — before the diary, not after it.
+ *
+ * It used to sit with the phone and email at the very end, which meant Ellie had
+ * the name for the last thirty seconds of a call and no chance to use it. Asked in
+ * the first minute it can be used naturally throughout, which is the whole point of
+ * having it. First name only here; the surname is a booking detail, not a courtesy.
+ */
+const EARLY_CONTACT_FIELDS = ['firstName'];
+
 /** Asked after a slot is chosen, in this order. */
-const CONTACT_FIELDS = ['name', 'phone', 'email'];
+const CONTACT_FIELDS = ['surname', 'phone', 'email'];
+
+/** Everything a booking needs. book_appointment checks all of these. */
+const ALL_CONTACT_FIELDS = [...EARLY_CONTACT_FIELDS, ...CONTACT_FIELDS];
+
+/**
+ * The full name as Cal.com, the sheet and the emails want it.
+ *
+ * "not given" is a real answer for a name but not something to write in a diary, so
+ * it is dropped here. Cal.com still needs a string, and a row that says so plainly
+ * beats one that says "not given not given".
+ */
+function fullName(state) {
+  const parts = [state.contact.firstName, state.contact.surname]
+    .filter((v) => isAnswered(v) && String(v).trim().toLowerCase() !== 'not given');
+  if (!parts.length) return state.contact.firstName ? 'Caller (name not given)' : null;
+  return parts.join(' ').trim();
+}
 
 /**
  * The loop breaker.
@@ -46,6 +73,10 @@ const MAX_ASKS = 2;
 const SOFT_FIELDS = new Set([
   'makeModel', 'symptoms', 'callerRelationship',
   'applianceCount', 'bedrooms', 'duration', 'previousWork',
+  // Names are soft. We ask early so we can use the first name, but refusing to book
+  // someone's boiler repair because they wouldn't give a name — when we have their
+  // number, their address and the fault — would be absurd. The office can ring.
+  'firstName', 'surname',
 ]);
 const HARD_BLOCKERS = new Set([
   'postcode', 'addressLine1', 'fault', 'serviceType', 'currentSystem',
@@ -53,21 +84,15 @@ const HARD_BLOCKERS = new Set([
   'lane',        // if we can't tell what they want, we can't book the right visit
   // A booking genuinely cannot exist without these: Cal.com requires an email,
   // and the office needs a name and number to ring about the arrival window.
-  'name', 'phone', 'email',
+  'firstName', 'surname', 'phone', 'email',
 ]);
 
-/**
- * Record that we asked for `field` and got nothing new. Returns what to do:
- * "ask" (carry on), "fill" (accept not given), or "stop" (hand to the office).
- */
-function noteAsked(state, field) {
-  if (!field) return 'ask';
-  state.asked[field] = (state.asked[field] || 0) + 1;
-  if (state.asked[field] <= MAX_ASKS) return 'ask';
+/** The verdict for a field's current count. Pure — safe to recompute. */
+function verdictFor(state, field) {
+  if ((state.asked[field] || 0) <= MAX_ASKS) return 'ask';
 
   if (SOFT_FIELDS.has(field)) {
-    if (field === 'callerRelationship') state.callerRelationship = 'not given';
-    else state.diagnostics[field] = 'not given';
+    setField(state, field, 'not given');
     return 'fill';
   }
   // Anything not explicitly soft stops the loop. Defaulting to "keep asking" is
@@ -76,6 +101,73 @@ function noteAsked(state, field) {
   // degrades into an office handoff rather than trapping a caller.
   state.stuck = field;
   return 'stop';
+}
+
+/**
+ * Record that we asked for `field` and got nothing new. Returns what to do:
+ * "ask" (carry on), "fill" (accept not given), or "stop" (hand to the office).
+ *
+ * ONE COUNT PER TURN. The counter is meant to measure "the caller was asked and
+ * didn't answer", but book_appointment is the only tool that checks the contact
+ * fields, and the model retries it several times in a row when it can't tell why
+ * a booking was refused. Charging a strike for each retry burned the caller's two
+ * chances without Ellie having said a word to them, and the call died holding a
+ * detail the caller was sitting there ready to give. A turn advances only when the
+ * model reports back what the caller said.
+ */
+function noteAsked(state, field) {
+  if (!field) return 'ask';
+  if (state.askedAt[field] !== state.turn) {
+    state.askedAt[field] = state.turn;
+    state.asked[field] = (state.asked[field] || 0) + 1;
+  }
+  return verdictFor(state, field);
+}
+
+/** A new caller turn: whatever we ask for now can be counted again. */
+function nextTurn(state) {
+  state.turn += 1;
+  return state.turn;
+}
+
+/**
+ * Where a field name actually lives. The counter and the gates speak in field
+ * names; the state is nested. Without this there is no way to ask "has the thing
+ * we got stuck on turned up since?" — which is why `stuck` was a one-way door.
+ */
+function fieldValue(state, field) {
+  if (field === 'postcode' || field === 'addressLine1') return state.location[field];
+  if (field === 'lane' || field === 'callerRelationship' || field === 'systemType') return state[field];
+  if (Object.prototype.hasOwnProperty.call(state.contact, field)) return state.contact[field];
+  return state.diagnostics[field];
+}
+
+/** The matching setter, so giving up on a field writes it where the gate reads it. */
+function setField(state, field, value) {
+  if (field === 'postcode' || field === 'addressLine1') state.location[field] = value;
+  else if (field === 'lane' || field === 'callerRelationship' || field === 'systemType') state[field] = value;
+  else if (Object.prototype.hasOwnProperty.call(state.contact, field)) {
+    state.contact[field] = value;
+    state.contact.name = fullName(state);
+  } else state.diagnostics[field] = value;
+  return value;
+}
+
+/**
+ * The way back out.
+ *
+ * `stuck` was set once and never cleared anywhere — one write, three reads — so a
+ * caller whose email was misheard twice got the office handoff for the rest of the
+ * call no matter what they said next. Once the field turns up, the call carries on.
+ */
+function unstick(state) {
+  const field = state.stuck;
+  if (!field) return false;
+  if (!isAnswered(fieldValue(state, field))) return false;
+  state.stuck = null;
+  state.asked[field] = 0;
+  delete state.askedAt[field];
+  return true;
 }
 
 // Kept for the repair lane's own question set and for older callers of this module.
@@ -131,7 +223,10 @@ function newState(conversationId, callerNumber) {
     },
 
     emergency: null, // null | "gas" | "co" | "water" | "electrical"
-    contact: { name: null, phone: null, email: null },
+    // firstName and surname are what get asked for and read back; `name` is the
+    // joined value everything downstream already expects, kept in step by
+    // record_details rather than captured on its own.
+    contact: { firstName: null, surname: null, name: null, phone: null, email: null },
 
     offeredSlots: [], // ONLY slots Cal.com returned this call
     bookingUid: null,
@@ -144,8 +239,15 @@ function newState(conversationId, callerNumber) {
     // in this service has any memory of what has already been said, which is how
     // one unrecorded field became an unbounded loop.
     asked: {},
+    // Which turn each field was last counted on, so the model retrying a tool
+    // inside one caller turn costs the caller nothing.
+    askedAt: {},
+    turn: 0,
     stuck: null,
     outcome: null,
+    // Set once a lost booking has been written to the sheet, so a model that keeps
+    // trying doesn't fill the office's tab with the same abandoned call.
+    lossLogged: false,
     events: [],
   };
 }
@@ -205,6 +307,13 @@ function missingFields(state) {
   // someone with a storage heater tells the caller you aren't listening.
   if (!isAnswered(state.location.postcode)) missing.push('postcode');
   else if (state.location.inArea !== true) missing.push('areaCheck');
+
+  // The first name sits here, between "we cover you" and the address: early enough
+  // to be used for the rest of the call, and after the one check that can end it.
+  // Taking someone's name and then telling them we don't come out that way is worse
+  // than not asking.
+  if (!isAnswered(state.contact.firstName)) missing.push('firstName');
+
   if (!isAnswered(state.location.addressLine1)) missing.push('addressLine1');
 
   if (state.systemCovered === null) missing.push('systemType');
@@ -278,10 +387,16 @@ module.exports = {
   missingFields,
   withGates,
   isAnswered,
+  fullName,
+  fieldValue,
+  unstick,
+  nextTurn,
   DIAGNOSTIC_FIELDS,
   LANE_FIELDS,
   LANES,
   CONTACT_FIELDS,
+  EARLY_CONTACT_FIELDS,
+  ALL_CONTACT_FIELDS,
   noteAsked,
   MAX_ASKS,
   SOFT_FIELDS,

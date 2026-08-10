@@ -34,6 +34,8 @@ function qualified(id) {
   s.diagnostics.makeModel = 'Worcester Bosch combi';
   s.diagnostics.gcOrErrCode = 'F28';
   s.diagnostics.symptoms = 'water underneath it';
+  s.contact.firstName = 'Ellie';
+  s.contact.surname = 'Test Booking';
   s.contact.name = 'Ellie Test Booking';
   s.contact.phone = '07986 321 440';
   s.contact.email = 'manyamsoumithreddy@gmail.com';

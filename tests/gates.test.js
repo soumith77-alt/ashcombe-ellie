@@ -13,6 +13,7 @@ const { test, beforeEach } = require('node:test');
 const state = require('../src/state');
 const tools = require('../src/tools');
 const postcode = require('../src/postcode');
+const questions = require('../src/questions');
 const jobDescription = require('../src/jobDescription');
 
 let calTouched = 0;
@@ -38,6 +39,8 @@ function fullyQualified(s) {
   s.diagnostics.fault = 'no hot water, heating fine';
   s.diagnostics.makeModel = 'Worcester combi';
   s.diagnostics.symptoms = 'pilot light out';
+  s.contact.firstName = 'James';
+  s.contact.surname = 'Whitfield';
   s.contact.name = 'James Whitfield';
   s.contact.phone = '07986 321 440';
   s.contact.email = 'james.whitfield@gmail.com';
@@ -247,6 +250,7 @@ test('next_question hands back the outstanding question, never a time offer', ()
 
   s.location.postcode = 'M20 2RT';
   s.location.inArea = true;
+  s.contact.firstName = 'James';
   s.location.addressLine1 = '14 Oak Road';
   s.systemCovered = true;
   s.callerRelationship = 'owner';
@@ -508,38 +512,87 @@ test('the loop breaker cannot open a gate on its own', () => {
 test('a name given early in the call is never asked for again', () => {
   const s = fresh();
   tools.recordDetails(s, { name: 'James Whitfield' });
+  assert.equal(s.contact.firstName, 'James');
+  assert.equal(s.contact.surname, 'Whitfield');
   assert.equal(s.contact.name, 'James Whitfield');
 
-  // Get as far as a chosen slot, where contact details are collected.
+  // Get as far as a chosen slot, where the remaining details are collected.
   tools.checkServiceArea(s, { postcode: 'M20 2RT' });
   tools.recordDetails(s, { addressLine1: '14 Oak Road', systemType: 'gas boiler', callerRelationship: 'owner', lane: 'repair' });
-  tools.recordDetails(s, { fault: 'no heating', makeModel: 'Worcester', symptoms: 'not given' });
+  tools.recordDetails(s, { fault: 'no heating', probeAnswer: 'all of them', makeModel: 'Worcester', symptoms: 'not given' });
   s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
 
-  assert.ok(!state.missingFields(s).includes('name'), 'the name is already known');
-  assert.ok(!/full name/i.test(tools.nextQuestionTool(s).say), 'must not ask for it again');
+  const missing = state.missingFields(s);
+  assert.ok(!missing.includes('firstName') && !missing.includes('surname'), 'the name is already known');
+  assert.ok(!/name/i.test(tools.nextQuestionTool(s).say), 'must not ask for it again');
 });
 
-test('contact details are asked after a time is chosen, not before', () => {
+test('the first name is asked early, the rest after a time is chosen', () => {
   const s = fresh();
   tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+
+  // Straight after "we cover you" — before the address, before the fault. This is
+  // the whole point: a name collected in the last thirty seconds can never be used.
+  assert.equal(state.missingFields(s)[0], 'firstName');
+  assert.ok(/first name/i.test(tools.nextQuestionTool(s).say));
+
+  tools.recordDetails(s, { firstName: 'Akrit' });
   tools.recordDetails(s, { addressLine1: '14 Oak Road', systemType: 'gas boiler', callerRelationship: 'owner', lane: 'repair' });
-  tools.recordDetails(s, { fault: 'no heating', makeModel: 'Worcester', symptoms: 'not given' });
+  tools.recordDetails(s, { fault: 'no heating', probeAnswer: 'all of them', makeModel: 'Worcester', symptoms: 'not given' });
 
   // No slot yet — asking for an email before we know we can even come out is
   // the wrong order, so she should be heading for the diary.
-  assert.ok(!state.missingFields(s).some((f) => ['name', 'phone', 'email'].includes(f)));
+  assert.ok(!state.missingFields(s).some((f) => ['surname', 'phone', 'email'].includes(f)));
   assert.ok(/day suits|booked in/i.test(tools.nextQuestionTool(s).say));
 
   s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
   assert.deepEqual(
-    state.missingFields(s).filter((f) => ['name', 'phone', 'email'].includes(f)),
-    ['name', 'phone', 'email'],
+    state.missingFields(s).filter((f) => ['surname', 'phone', 'email'].includes(f)),
+    ['surname', 'phone', 'email'],
     'and in that order once a slot is on the table'
   );
 });
 
-test('book_appointment cannot ask for the same detail forever', async () => {
+test('a surname is asked for spelled out, and a full name splits itself', () => {
+  const s = fresh();
+  // Answering "can I take your first name?" with both is two answers, not one.
+  tools.recordDetails(s, { firstName: 'Akrit Sharma' });
+  assert.equal(s.contact.firstName, 'Akrit');
+  assert.equal(s.contact.surname, 'Sharma');
+
+  const b = fresh('spell');
+  b.location.postcode = 'M20 2RT';
+  b.location.inArea = true;
+  b.contact.firstName = 'Akrit';
+  b.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+  b.location.addressLine1 = '14 Oak Road';
+  b.systemCovered = true;
+  b.callerRelationship = 'owner';
+  b.lane = 'repair';
+  Object.assign(b.diagnostics, { fault: 'no heating', probeAnswer: 'all', makeModel: 'Worcester', symptoms: 'none' });
+
+  assert.match(questions.LINES.surname, /spell/i, 'the surname must be spelled out, not guessed at');
+  assert.equal(state.missingFields(b)[0], 'surname');
+});
+
+/* ------------------------------- the loop guard has to be survivable (R3) */
+
+test('the model retrying book_appointment does not burn the caller\'s chances', async () => {
+  const s = fullyQualified(fresh());
+  s.contact.email = null;
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+
+  // Five calls inside ONE caller turn: the model can't tell why it was refused and
+  // tries again. Ellie has asked the caller precisely once. Counting each retry is
+  // what killed a booking at the last step with the caller sat there ready to answer.
+  for (let i = 0; i < 5; i++) {
+    await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+  }
+  assert.equal(s.asked.email, 1, `one question asked, one strike — got ${s.asked.email}`);
+  assert.equal(s.stuck, null, 'and the call is still alive');
+});
+
+test('a caller who really never answers still stops the loop', async () => {
   const s = fullyQualified(fresh());
   s.contact.email = null;
   s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
@@ -548,9 +601,144 @@ test('book_appointment cannot ask for the same detail forever', async () => {
   for (let i = 0; i < 5; i++) {
     const r = await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
     reasons.push(r.reason);
+    tools.recordDetails(s, {});   // the caller was asked and gave nothing back
   }
   assert.ok(reasons.includes('stuck'), `should escalate, got: ${JSON.stringify(reasons)}`);
   assert.equal(s.bookingUid, null, 'and must still never book without an email');
+});
+
+test('giving the answer at last reopens a stuck call', async () => {
+  const s = fullyQualified(fresh());
+  s.contact.email = null;
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: '2026-08-12T08:00:00.000+01:00' }];
+
+  for (let i = 0; i < 5; i++) {
+    await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    tools.recordDetails(s, {});
+  }
+  assert.equal(s.stuck, 'email', 'precondition: the call gave up on the email');
+
+  // `stuck` was set once and never cleared anywhere, so this caller — who is right
+  // there spelling out their email — got the office handoff for the rest of the call.
+  tools.recordDetails(s, { email: 'akrit@example.com' });
+  assert.equal(s.stuck, null, 'the answer arrived; the call carries on');
+
+  const r = await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+  assert.notEqual(r.reason, 'stuck', `must not still be handing off: ${JSON.stringify(r)}`);
+  assert.ok(!/ring the office/i.test(r.say || ''), `and must not still say it: "${r.say}"`);
+});
+
+/* ------------------------------- a fault they already named (R5) */
+
+test('a caller who names the fault is not asked the generic fork again', () => {
+  const s = fresh();
+  tools.checkServiceArea(s, { postcode: 'M20 2RT' });
+  tools.recordDetails(s, { firstName: 'Akrit', addressLine1: '14 Oak Road', systemType: 'gas boiler' });
+
+  // The opening line was "it's making a banging noise". That IS the fault.
+  tools.recordDetails(s, { lane: 'repair', fault: 'making a banging noise' });
+
+  const r = tools.nextQuestionTool(s);
+  assert.match(r.say, /banging|whistl|kettl/i, `expected the noise probe, got: "${r.say}"`);
+  assert.ok(!/hot water|heating.*gone/i.test(r.say),
+    `must not ask what they already told us: "${r.say}"`);
+});
+
+test('the probe still never jumps the queue in front of the area check', () => {
+  const s = fresh();
+  // A fault arrives before we know where the property is — which happens on almost
+  // every call, since people lead with the problem.
+  tools.recordDetails(s, { lane: 'repair', fault: 'water pouring out underneath' });
+  const r = tools.nextQuestionTool(s);
+  assert.match(r.say, /postcode/i, `location comes first, got: "${r.say}"`);
+});
+
+/* --------------------------- a booking that failed must leave a trace (R6) */
+
+test('a failed booking is written down and the manager is told', async () => {
+  const s = fullyQualified(fresh());
+  const iso = '2026-08-12T08:00:00.000+01:00';
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: iso }];
+
+  const sheets = require('../src/sheets');
+  const email = require('../src/email');
+  const real = { slots: cal.getSlots, create: cal.createBooking, log: sheets.logBooking, mail: email.sendBookingFailed };
+  const rows = [], mails = [];
+  cal.getSlots = async () => ({ ok: true, slots: [iso] });
+  cal.createBooking = async () => ({ ok: false, status: 500, json: { error: 'boom' } });
+  sheets.logBooking = (st, label, notes, status) => rows.push({ label, status, name: st.contact.name, phone: st.contact.phone });
+  email.sendBookingFailed = (st, label) => mails.push({ label, phone: st.contact.phone });
+
+  try {
+    const r = await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'booking_failed');
+
+    // Before this, the whole thing vanished: an in-memory event swept after two
+    // hours, on a disk that doesn't survive a deploy. Nobody could ring them back.
+    assert.equal(rows.length, 1, 'the office needs a row for this');
+    assert.equal(rows[0].status, 'NEEDS CALLBACK');
+    assert.equal(rows[0].label, 'Wednesday the 12th at 8am', 'including the time they wanted');
+    assert.equal(rows[0].phone, '07986 321 440', 'and a number to ring');
+    assert.equal(mails.length, 1, 'and the manager needs telling');
+
+    // The model retries; the office should not get three identical rows.
+    await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    assert.equal(rows.length, 1, 'logged once per call, however many retries');
+  } finally {
+    cal.getSlots = real.slots;
+    cal.createBooking = real.create;
+    sheets.logBooking = real.log;
+    email.sendBookingFailed = real.mail;
+  }
+});
+
+test('a call that recovers closes its own callback row', async () => {
+  const s = fullyQualified(fresh());
+  const iso = '2026-08-12T08:00:00.000+01:00';
+  s.offeredSlots = [{ label: 'Wednesday the 12th at 8am', startIso: iso }];
+
+  const sheets = require('../src/sheets');
+  const email = require('../src/email');
+  const real = { slots: cal.getSlots, create: cal.createBooking, log: sheets.logBooking,
+    mail: email.sendBookingFailed, booked: email.sendBooked, resolve: sheets.resolveLoss };
+  let failFirst = true, resolved = [];
+  cal.getSlots = async () => ({ ok: true, slots: [iso] });
+  cal.createBooking = async () => {
+    if (failFirst) { failFirst = false; return { ok: false, status: 500, json: {} }; }
+    return { ok: true, status: 200, json: { data: { uid: 'uid-recovered' } } };
+  };
+  sheets.logBooking = () => {};
+  sheets.resolveLoss = (ref) => resolved.push(ref);
+  email.sendBookingFailed = () => {};
+  email.sendBooked = () => {};
+
+  try {
+    await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    const ok = await tools.bookAppointment(s, { chosenSlotLabel: 'Wednesday the 12th at 8am' });
+    assert.equal(ok.ok, true);
+    // Otherwise the office rings a customer who is already in the diary.
+    assert.deepEqual(resolved, ['test-call']);
+  } finally {
+    Object.assign(cal, { getSlots: real.slots, createBooking: real.create });
+    Object.assign(sheets, { logBooking: real.log, resolveLoss: real.resolve });
+    Object.assign(email, { sendBookingFailed: real.mail, sendBooked: real.booked });
+  }
+});
+
+test('the console shows the fields the gate actually reads', () => {
+  // "Job type" sat at the top of Gate B's checklist and is not a gate field in any
+  // lane, so the one panel meant to explain a stuck call was misleading about why.
+  const fs = require('node:fs');
+  const widget = fs.readFileSync(require('node:path').join(__dirname, '..', 'public', 'widget.html'), 'utf8');
+  const block = widget.slice(widget.indexOf('var LANE_CHECKS'), widget.indexOf('var TICKMARK'));
+
+  assert.ok(!/issueType/.test(block), 'issueType is not a Gate B field');
+  for (const [lane, fields] of Object.entries(state.LANE_FIELDS)) {
+    for (const f of fields) {
+      assert.ok(block.includes(`'${f}'`), `${lane}: the console never shows ${f}`);
+    }
+  }
 });
 
 /* --------------------------------------------- transient failures and retries */
